@@ -1,0 +1,1038 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Build Your AI Game World — 4-Week Student Project</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.10.0/tabler-icons.min.css" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      /* Minimalist monochrome palette with a single accent */
+      --accent: #1a1a1a;
+      --accent-light: #f0f0f0;
+      --text-primary: #111111;
+      --text-secondary: #555555;
+      --text-muted: #999999;
+      --bg-page: #ffffff;
+      --bg-card: #ffffff;
+      --bg-surface: #f7f7f7;
+      --border: #e5e5e5;
+      --border-strong: #cccccc;
+      --radius-sm: 4px;
+      --radius-md: 6px;
+      --radius-lg: 8px;
+      --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+
+      /* Accent */
+      --accent: #1d4ed8;
+      --accent-hover: #1e40af;
+      --accent-light: #eff6ff;
+      --accent-border: #bfdbfe;
+
+      /* Purple (Week 1) */
+      --purple-50: #f5f3ff; --purple-100: #ede9fe; --purple-200: #ddd6fe;
+      --purple-400: #a78bfa; --purple-600: #7c3aed; --purple-800: #5b21b6; --purple-900: #4c1d95;
+
+      /* Teal (Week 2) */
+      --teal-50: #f0fdfa; --teal-100: #ccfbf1; --teal-400: #2dd4bf; --teal-600: #0d9488; --teal-800: #115e59;
+
+      /* Blue (Week 3) */
+      --blue-50: #eff6ff; --blue-100: #dbeafe; --blue-400: #60a5fa; --blue-600: #1d4ed8; --blue-800: #1e3a8a;
+
+      /* Amber (Week 4) */
+      --amber-50: #fffbeb; --amber-100: #fef3c7; --amber-400: #fbbf24; --amber-600: #d97706; --amber-800: #92400e; --amber-900: #78350f;
+    }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg-page);
+      color: var(--text-primary);
+      min-height: 100vh;
+      padding: 3rem 1.5rem 5rem;
+      line-height: 1.6;
+      animation: fadeInPage 0.4s ease both;
+    }
+
+    @keyframes fadeInPage {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Smooth hover lift on interactive cards */
+    .step-card {
+      transition: box-shadow 0.2s ease, transform 0.2s ease;
+    }
+    .step-card:hover {
+      box-shadow: 0 2px 12px rgba(29,78,216,0.08);
+      transform: translateY(-1px);
+    }
+    .tool-card {
+      transition: box-shadow 0.2s ease, transform 0.2s ease;
+    }
+    .tool-card:hover {
+      box-shadow: 0 2px 12px rgba(29,78,216,0.08);
+      transform: translateY(-1px);
+    }
+    .overview-card {
+      transition: box-shadow 0.2s ease, transform 0.2s ease;
+    }
+    .overview-card:hover {
+      box-shadow: 0 2px 12px rgba(29,78,216,0.08);
+      transform: translateY(-1px);
+    }
+
+    .container { max-width: 700px; margin: 0 auto; }
+
+    /* HERO */
+    .hero {
+      border-bottom: 2px solid var(--accent);
+      padding: 0 0 2.5rem 0;
+      margin-bottom: 3rem;
+      position: relative;
+      overflow: visible;
+      background: none;
+      border-radius: 0;
+    }
+    .hero::before, .hero::after { display: none; }
+
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: var(--accent-light);
+      color: var(--accent);
+      font-size: 11px;
+      padding: 4px 12px;
+      border-radius: 2px;
+      border: 1px solid var(--accent-border);
+      margin-bottom: 16px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+    .hero h1 {
+      color: var(--text-primary);
+      font-size: 32px;
+      font-weight: 700;
+      margin-bottom: 14px;
+      line-height: 1.2;
+      letter-spacing: -0.5px;
+    }
+    .hero p {
+      color: var(--text-secondary);
+      font-size: 15px;
+      line-height: 1.75;
+      max-width: 560px;
+    }
+    .hero-stats {
+      display: flex;
+      gap: 40px;
+      margin-top: 2rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--accent-border);
+    }
+    .hero-stat .num { color: var(--accent); font-size: 22px; font-weight: 700; }
+    .hero-stat .lbl { color: var(--text-muted); font-size: 11px; margin-top: 3px; text-transform: uppercase; letter-spacing: 0.06em; }
+
+    /* OVERVIEW CARDS */
+    .overview-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 1px;
+      margin-bottom: 3rem;
+      border: 1px solid var(--accent-border);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      background: var(--accent-border);
+    }
+    .overview-card {
+      background: var(--bg-card);
+      padding: 1.25rem 1rem;
+      text-align: left;
+      border-top: 3px solid transparent;
+      transition: border-color 0.2s ease, background 0.2s ease;
+    }
+    .overview-card:hover {
+      border-top-color: var(--accent);
+      background: var(--accent-light);
+    }
+    .overview-card .ov-icon { display: none; }
+    .overview-card .ov-week {
+      font-size: 10px;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 6px;
+      font-weight: 700;
+    }
+    .overview-card .ov-title {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-primary);
+      line-height: 1.4;
+      margin-bottom: 10px;
+    }
+    .overview-card .ov-tag {
+      display: inline-block;
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 2px;
+      margin-top: 0;
+      background: var(--accent-light) !important;
+      color: var(--accent) !important;
+      border: 1px solid var(--accent-border);
+    }
+
+    /* WEEK TABS */
+    .week-tabs {
+      display: flex;
+      gap: 0;
+      margin-bottom: 2.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .tab-btn {
+      display: flex; align-items: center; gap: 6px;
+      padding: 10px 20px;
+      border-radius: 0;
+      border: none;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      background: none;
+      color: var(--text-muted);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: color 0.2s ease, border-color 0.2s ease;
+      font-family: var(--font);
+    }
+    .tab-btn:hover { color: var(--accent); }
+    .tab-btn.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+      background: none;
+    }
+
+    /* WEEK PANELS — smooth fade + slide transition */
+    .panels-wrap { position: relative; min-height: 200px; }
+    .week-panel {
+      opacity: 0;
+      transform: translateY(12px);
+      pointer-events: none;
+      position: absolute;
+      top: 0; left: 0; width: 100%;
+      transition: opacity 0.32s ease, transform 0.32s ease;
+      visibility: hidden;
+    }
+    .week-panel.active {
+      opacity: 1;
+      transform: translateY(0);
+      pointer-events: auto;
+      position: relative;
+      visibility: visible;
+    }
+
+    /* WEEK HEADER */
+    .week-header {
+      display: flex; align-items: flex-start; gap: 0; margin-bottom: 2rem;
+      flex-direction: column;
+    }
+    .week-icon { display: none; }
+    .week-title h2 { font-size: 22px; font-weight: 700; color: var(--text-primary); letter-spacing: -0.3px; }
+    .week-title p { font-size: 14px; color: var(--text-secondary); margin-top: 6px; line-height: 1.65; max-width: 520px; }
+    .week-tag {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 600;
+      padding: 3px 9px;
+      border-radius: 2px;
+      margin-top: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    /* PROGRESS */
+    .progress-wrap {
+      background: var(--accent-light);
+      border-radius: 0;
+      height: 3px;
+      margin: 1.5rem 0 0.5rem;
+      overflow: hidden;
+    }
+    .progress-bar {
+      height: 100%;
+      border-radius: 0;
+      background: var(--accent) !important;
+      transition: width 0.4s;
+    }
+    .progress-label { font-size: 11px; color: var(--accent); text-align: right; letter-spacing: 0.03em; font-weight: 600; }
+
+    /* LABELS */
+    .section-label {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 12px;
+      margin-top: 2rem;
+      padding-bottom: 8px;
+      border-bottom: 2px solid var(--accent-light);
+    }
+
+    /* BRIEF CARD */
+    .brief-card {
+      background: var(--bg-card);
+      border: 1px solid var(--accent-border);
+      border-radius: var(--radius-md);
+      margin-bottom: 1.5rem;
+      overflow: hidden;
+    }
+    .brief-header {
+      display: flex; align-items: center; gap: 12px;
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid var(--accent-border);
+      background: var(--accent-light);
+    }
+    .brief-avatar {
+      width: 32px; height: 32px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700; flex-shrink: 0; color: #fff;
+      background: var(--accent) !important;
+    }
+    .brief-meta { flex: 1; }
+    .brief-meta .bm-name { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+    .brief-meta .bm-role { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+    .brief-tag {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 3px 9px;
+      border-radius: 2px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      flex-shrink: 0;
+    }
+    .brief-body { padding: 1.25rem; }
+    .brief-body .brief-subject {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      margin-bottom: 12px;
+    }
+    .brief-body p {
+      font-size: 13.5px;
+      color: var(--text-secondary);
+      line-height: 1.8;
+      margin-bottom: 10px;
+    }
+    .brief-body p:last-child { margin-bottom: 0; }
+    .brief-body .brief-sign { font-size: 12px; color: var(--text-muted); margin-top: 14px; }
+    .brief-body strong { color: var(--text-primary); font-weight: 600; }
+
+    /* SCENARIO */
+    .scenario-card {
+      background: var(--accent-light);
+      border-radius: var(--radius-md);
+      padding: 1.25rem;
+      margin-bottom: 0.5rem;
+      border-left: 3px solid var(--accent) !important;
+      border: 1px solid var(--accent-border);
+    }
+    .scenario-card h3 { font-size: 13px; font-weight: 700; color: var(--accent); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .scenario-card p { font-size: 13.5px; color: var(--text-secondary); line-height: 1.75; }
+
+    /* STEP CARDS */
+    .steps-grid { display: grid; gap: 1px; border: 1px solid var(--accent-border); border-radius: var(--radius-md); overflow: hidden; background: var(--accent-border); }
+    .step-card {
+      background: var(--bg-card);
+      border: none;
+      border-radius: 0;
+      padding: 1.25rem;
+      display: flex; gap: 16px; align-items: flex-start;
+      border-left: 3px solid transparent;
+      transition: box-shadow 0.2s ease, transform 0.2s ease, border-left-color 0.2s ease, background 0.2s ease;
+    }
+    .step-card:hover {
+      border-left-color: var(--accent);
+      background: var(--accent-light);
+      box-shadow: 0 2px 12px rgba(29,78,216,0.08);
+      transform: translateY(-1px);
+    }
+    .step-num {
+      width: 24px; height: 24px;
+      border-radius: 50%;
+      border: 1.5px solid var(--accent);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700; flex-shrink: 0;
+      background: var(--accent-light) !important;
+      color: var(--accent) !important;
+    }
+    .step-content h4 { font-size: 13.5px; font-weight: 600; color: var(--text-primary); margin-bottom: 5px; }
+    .step-content p { font-size: 13px; color: var(--text-secondary); line-height: 1.65; }
+    .tool-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; }
+    .tool-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 11px; padding: 3px 10px;
+      border-radius: 2px;
+      font-weight: 600;
+      background: var(--accent-light);
+      color: var(--accent);
+      border: 1px solid var(--accent-border);
+    }
+
+    /* AI TOOLS GRID */
+    .ai-tools { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; border: 1px solid var(--accent-border); border-radius: var(--radius-md); overflow: hidden; background: var(--accent-border); }
+    .tool-card {
+      background: var(--bg-card);
+      border: none;
+      border-radius: 0;
+      padding: 1.25rem;
+      border-top: 3px solid transparent;
+      transition: box-shadow 0.2s ease, transform 0.2s ease, border-top-color 0.2s ease, background 0.2s ease;
+    }
+    .tool-card:hover {
+      border-top-color: var(--accent);
+      background: var(--accent-light);
+      box-shadow: 0 2px 12px rgba(29,78,216,0.08);
+      transform: translateY(-1px);
+    }
+    .tool-card .tool-type { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 5px; color: var(--accent) !important; }
+    .tool-card .tool-name { font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 5px; }
+    .tool-card .tool-use { font-size: 12px; color: var(--text-secondary); line-height: 1.55; }
+
+    /* DELIVERABLES */
+    .deliverable-box {
+      background: var(--bg-card);
+      border: 1px solid var(--accent-border);
+      border-radius: var(--radius-md);
+      padding: 0 1.25rem;
+    }
+    .deliverable-row {
+      display: flex; align-items: center; gap: 14px;
+      padding: 12px 0; border-bottom: 1px solid var(--accent-light);
+      transition: background 0.15s ease;
+    }
+    .deliverable-row:hover { background: var(--accent-light); margin: 0 -1.25rem; padding: 12px 1.25rem; }
+    .deliverable-row:last-child { border-bottom: none; }
+    .del-check {
+      width: 20px; height: 20px; border-radius: 50%;
+      border: 1.5px solid var(--accent);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; background: var(--accent-light);
+      color: var(--accent);
+      font-size: 10px;
+    }
+    .deliverable-row span { font-size: 13.5px; color: var(--text-primary); line-height: 1.5; }
+
+    /* TIP BOX */
+    .tip-box {
+      border-radius: var(--radius-md);
+      padding: 1.1rem 1.25rem;
+      margin-top: 1.5rem;
+      display: flex; gap: 12px; align-items: flex-start;
+      background: var(--accent-light) !important;
+      border: 1px solid var(--accent-border);
+      border-left: 3px solid var(--accent);
+    }
+    .tip-box i { font-size: 16px; flex-shrink: 0; margin-top: 2px; color: var(--accent) !important; }
+    .tip-box p { font-size: 13px; line-height: 1.7; color: var(--text-secondary) !important; }
+    .tip-box strong { color: var(--accent) !important; }
+
+    /* FOOTER */
+    .footer {
+      text-align: center;
+      margin-top: 4rem;
+      padding-top: 2rem;
+      border-top: 2px solid var(--accent-light);
+    }
+    .footer p { font-size: 12px; color: var(--text-muted); line-height: 1.8; }
+    .footer strong { color: var(--accent); font-weight: 600; }
+
+    /* Week-color backgrounds — allow natural tints */
+
+    @media (max-width: 500px) {
+      body { padding: 1.5rem 1rem 4rem; }
+      .hero h1 { font-size: 24px; }
+      .ai-tools { grid-template-columns: 1fr; }
+      .overview-grid { grid-template-columns: 1fr 1fr; }
+      .hero-stats { gap: 24px; }
+      .week-tabs { overflow-x: auto; flex-wrap: nowrap; }
+      .tab-btn { white-space: nowrap; padding: 10px 14px; font-size: 12px; }
+    }
+
+    @media print {
+      body { background: #fff; padding: 1rem; animation: none; }
+      .week-panel { opacity: 1 !important; transform: none !important; visibility: visible !important; position: static !important; page-break-before: always; }
+      .week-tabs { display: none; }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="hero-badge"><i class="ti ti-device-gamepad-2"></i> Student Project Guide</div>
+    <h1>Build Your AI Game World </h1>
+    <p>You've just landed a junior role at <strong>PixelForge Studios</strong> — a fast-growing indie game company preparing for its biggest investor pitch ever. Over the next 4 weeks, you'll work alongside real team members to design, illustrate, promote, and pitch an original game concept — powered by AI tools.</p>
+    <div class="hero-stats">
+      <div class="hero-stat"><div class="num">4</div><div class="lbl">Weeks</div></div>
+      <div class="hero-stat"><div class="num">3</div><div class="lbl">AI Types</div></div>
+      <div class="hero-stat"><div class="num">12+</div><div class="lbl">Missions</div></div>
+      <div class="hero-stat"><div class="num">Age 12</div><div class="lbl">Level</div></div>
+    </div>
+  </div>
+
+  <!-- STUDIO CONTEXT -->
+  <div style="background:var(--accent-light);border:1px solid var(--accent-border);border-left:3px solid var(--accent);border-radius:var(--radius-md);padding:1.25rem 1.4rem;margin-bottom:1.5rem;">
+    <div style="display:none;"></div>
+    <div>
+      <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:6px;">Your Workplace — PixelForge Studios</div>
+      <p style="font-size:13px;color:var(--text-secondary);line-height:1.75;margin-bottom:8px;">PixelForge is a 12-person indie game studio known for bold ideas and fast prototyping. Founded in 2019, the team has shipped three mobile games and is now racing to secure Series A funding. The studio runs on creativity, tight deadlines, and — increasingly — AI tools that let a small team punch above its weight.</p>
+      <p style="font-size:13px;color:var(--text-secondary);line-height:1.75;margin-bottom:10px;">You've been brought on as a <strong style="color:var(--text-primary);">junior team member</strong> with one mission: help build, visualise, and pitch a brand-new game concept before Demo Day. You'll report to four different team leads over 4 weeks — each one will give you a brief, a deadline, and a real job to do.</p>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;">
+        <span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;background:var(--bg-surface);color:var(--text-secondary);padding:4px 12px;border-radius:2px;font-weight:500;border:1px solid var(--border);"><i class="ti ti-user" style="font-size:12px;"></i> Marcus Rivera — Lead Designer</span>
+        <span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;background:var(--bg-surface);color:var(--text-secondary);padding:4px 12px;border-radius:2px;font-weight:500;border:1px solid var(--border);"><i class="ti ti-palette" style="font-size:12px;"></i> Sofia Chen — Art Director</span>
+        <span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;background:var(--bg-surface);color:var(--text-secondary);padding:4px 12px;border-radius:2px;font-weight:500;border:1px solid var(--border);"><i class="ti ti-speakerphone" style="font-size:12px;"></i> Jordan Okafor — Marketing</span>
+        <span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;background:var(--bg-surface);color:var(--text-secondary);padding:4px 12px;border-radius:2px;font-weight:500;border:1px solid var(--border);"><i class="ti ti-briefcase" style="font-size:12px;"></i> Aisha Patel — CEO</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- OVERVIEW -->
+  <div class="section-label" style="margin-top:0;">Project at a glance</div>
+  <div class="overview-grid">
+    <div class="overview-card">
+      <div class="ov-icon"></div>
+      <div class="ov-week">Week 1</div>
+      <div class="ov-title">Design your game with AI code</div>
+      <span class="ov-tag" style="background:var(--purple-50);color:var(--purple-800);">AI Code</span>
+    </div>
+    <div class="overview-card">
+      <div class="ov-icon"></div>
+      <div class="ov-week">Week 2</div>
+      <div class="ov-title">Create game art with AI images</div>
+      <span class="ov-tag" style="background:var(--teal-50);color:var(--teal-600);">AI Image</span>
+    </div>
+    <div class="overview-card">
+      <div class="ov-icon"></div>
+      <div class="ov-week">Week 3</div>
+      <div class="ov-title">Bring it to life with AI video</div>
+      <span class="ov-tag" style="background:var(--blue-50);color:var(--blue-600);">AI Video</span>
+    </div>
+    <div class="overview-card">
+      <div class="ov-icon"></div>
+      <div class="ov-week">Week 4</div>
+      <div class="ov-title">Present your game to the world</div>
+      <span class="ov-tag" style="background:var(--amber-50);color:var(--amber-800);">Final Project</span>
+    </div>
+  </div>
+
+  <!-- TABS -->
+  <div class="week-tabs">
+    <button class="tab-btn active" onclick="showWeek(1)"><i class="ti ti-sparkles"></i> Week 1 — Code</button>
+    <button class="tab-btn" onclick="showWeek(2)"><i class="ti ti-palette"></i> Week 2 — Image</button>
+    <button class="tab-btn" onclick="showWeek(3)"><i class="ti ti-video"></i> Week 3 — Video</button>
+    <button class="tab-btn" onclick="showWeek(4)"><i class="ti ti-trophy"></i> Week 4 — Present</button>
+  </div>
+
+  <div class="panels-wrap">
+  <!-- ===== WEEK 1 ===== -->
+  <div class="week-panel active" id="week-1">
+    <div class="week-header">
+      <div class="week-icon" style="background:var(--purple-50);"></div>
+      <div class="week-title">
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px;">Week 1 of 4</div>
+        <h2>Design your game with AI code</h2>
+        <p>Use AI to write code, invent your game's world and rules — no coding experience needed!</p>
+        <span class="week-tag" style="background:var(--purple-50);color:var(--purple-800);">AI Code</span>
+      </div>
+    </div>
+
+    <div class="progress-wrap"><div class="progress-bar" style="width:25%"></div></div>
+    <div class="progress-label">Week 1 of 4 — 25% of project complete</div>
+
+    <div class="section-label">Your brief this week</div>
+    <div class="brief-card">
+      <div class="brief-header">
+        <div class="brief-avatar" style="background:var(--accent);">MR</div>
+        <div class="brief-meta">
+          <div class="bm-name">Marcus Rivera</div>
+          <div class="bm-role">Lead Game Designer · PixelForge Studios</div>
+        </div>
+        <span class="brief-tag" style="background:var(--purple-50);color:var(--purple-800);">Week 1 Brief</span>
+      </div>
+      <div class="brief-body">
+        <div class="brief-subject">Subject: Welcome to the team — your first prototype task</div>
+        <p>Hey! Welcome aboard at PixelForge. We're really excited to have you as our newest junior designer. Fair warning — it's a bit chaotic here right now. We have six weeks until our investor demo and we're one designer short, which is exactly why you're here.</p>
+        <p>Here's what I need from you this week: <strong>come up with a game concept, write the core rules, and use Claude or ChatGPT to generate some starter HTML code</strong> so we can actually click around and feel it. It doesn't need to be fancy — just something playable in a browser. We use AI here all the time to speed up the early stages, so don't be shy about it!</p>
+        <p>Quick thing about how we work at PixelForge: we <em>always</em> document our prompts. Any time you ask an AI something, save what you typed. We review these later to understand what worked — it's part of how we build our studio's "prompt library." So keep notes as you go.</p>
+        <p>One thing I always tell new team members: <strong>the AI is your assistant, not your brain.</strong> You still have to decide what's fun. Give it a go, make some changes yourself, and send me what you've got by Friday. The whole team is waiting to see what you come up with!</p>
+        <div class="brief-sign">— Marcus · marcus.r@pixelforge.fake · Lead Game Designer, ext. 204</div>
+      </div>
+    </div>
+
+    <div class="scenario-card">
+      <h3> Your role: Junior Game Designer at PixelForge Studios</h3>
+      <p><strong>The situation:</strong> PixelForge Studios has 6 weeks until an investor demo day. The studio's lead designer, Marcus Rivera, has just pulled you into the project after the original junior designer got reassigned. The studio is betting on AI tools to help a small team prototype faster than ever before.</p>
+      <p style="margin-top:8px;">Your job this week: turn a raw game idea into a real, clickable prototype using AI-assisted coding. Studios like <em>Supercell</em> (makers of Clash of Clans) and indie teams building Roblox games do exactly this — they spin up rough prototypes in days, not months, to test whether an idea is fun before spending money on it. You're doing the same thing.</p>
+      <p style="margin-top:8px;"><strong>Remember:</strong> Marcus is counting on you. The prototype doesn't have to be perfect — it has to be convincing enough to show the team that this idea is worth building.</p>
+    </div>
+
+    <div class="section-label">Your missions this week</div>
+    <div class="steps-grid">
+      <div class="step-card">
+        <div class="step-num" style="background:var(--purple-50);color:var(--purple-600);">1</div>
+        <div class="step-content">
+          <h4>Pick your game idea</h4>
+          <p>Choose a genre: adventure, puzzle, racing, survival, or RPG. Give your game a name and write 3 sentences about what the player does.</p>
+          <div class="tool-chips">
+            <span class="tool-chip" style="background:var(--purple-50);color:var(--purple-800);"><i class="ti ti-sparkles"></i> ChatGPT</span>
+          </div>
+        </div>
+      </div>
+      <div class="step-card">
+        <div class="step-num" style="background:var(--purple-50);color:var(--purple-600);">2</div>
+        <div class="step-content">
+          <h4>Ask AI to write your game rules</h4>
+          <p>Prompt an AI: <em>"Write 5 rules for a game where players explore a jungle to collect ancient artifacts before time runs out."</em> Edit the result to match your idea.</p>
+          <div class="tool-chips">
+            <span class="tool-chip" style="background:var(--purple-50);color:var(--purple-800);"><i class="ti ti-sparkles"></i> ChatGPT</span>
+          </div>
+        </div>
+      </div>
+      <div class="step-card">
+        <div class="step-num" style="background:var(--purple-50);color:var(--purple-600);">3</div>
+        <div class="step-content">
+          <h4>Generate starter HTML game code</h4>
+          <p>Ask AI: <em>"Write a simple HTML/JavaScript game where a player moves a character using arrow keys on a colourful grid."</em> Copy the code into a browser and see it run!</p>
+          <div class="tool-chips">
+            <span class="tool-chip" style="background:var(--purple-50);color:var(--purple-800);"><i class="ti ti-code"></i> Claude AI</span>
+          </div>
+        </div>
+      </div>
+      <div class="step-card">
+        <div class="step-num" style="background:var(--purple-50);color:var(--purple-600);">4</div>
+        <div class="step-content">
+          <h4>Customise the code</h4>
+          <p>Ask AI to change the colours, add a score counter, or make the character faster. Try 3 different modifications and write down what changed.</p>
+          <div class="tool-chips">
+            <span class="tool-chip" style="background:var(--purple-50);color:var(--purple-800);"><i class="ti ti-code"></i> Claude AI</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-label">AI tools for this week</div>
+    <div class="ai-tools">
+      <div class="tool-card">
+        <div class="tool-type" style="color:var(--purple-600);">AI Code</div>
+        <div class="tool-name">Claude AI</div>
+        <div class="tool-use">Ask it to write, explain, and fix your game code step by step.</div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-type" style="color:var(--purple-600);">AI Prompt &amp; Writing</div>
+        <div class="tool-name">ChatGPT</div>
+        <div class="tool-use">Write game rules, storylines, and character backstories using prompts.</div>
+      </div>
+    </div>
+
+    <div class="section-label">Deliverables — what to submit</div>
+    <div class="deliverable-box">
+      <div class="deliverable-row"><div class="del-check"></div><span>A 1-page "game design doc" with your game name, genre, and 5 rules</span></div>
+      <div class="deliverable-row"><div class="del-check"></div><span>A working HTML game file that runs in a browser</span></div>
+      <div class="deliverable-row"><div class="del-check"></div><span>A screenshot of your game with a note: "What did AI help me build?"</span></div>
+    </div>
+
+    <div class="tip-box" style="background:var(--purple-50);">
+      <i class="ti ti-bulb" style="color:var(--purple-600);"></i>
+      <p style="color:var(--purple-900);"><strong>Pro tip:</strong> If the AI gives you confusing code, ask it: <em>"Can you explain this code to me like I'm 12 years old?"</em> Good prompts get better results!</p>
+    </div>
+  </div>
+
+  <!-- ===== WEEK 2 ===== -->
+  <div class="week-panel" id="week-2">
+    <div class="week-header">
+      <div class="week-icon" style="background:var(--teal-50);"></div>
+      <div class="week-title">
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px;">Week 2 of 4</div>
+        <h2>Create game art with AI images</h2>
+        <p>Design characters, backgrounds, and items using AI image generators — your game gets a visual identity!</p>
+        <span class="week-tag" style="background:var(--teal-50);color:var(--teal-600);">AI Image</span>
+      </div>
+    </div>
+
+    <div class="progress-wrap"><div class="progress-bar" style="width:50%"></div></div>
+    <div class="progress-label">Week 2 of 4 — 50% of project complete</div>
+
+    <div class="section-label">Your brief this week</div>
+    <div class="brief-card">
+      <div class="brief-header">
+        <div class="brief-avatar" style="background:var(--accent);">SC</div>
+        <div class="brief-meta">
+          <div class="bm-name">Sofia Chen</div>
+          <div class="bm-role">Art Director · PixelForge Studios</div>
+        </div>
+        <span class="brief-tag" style="background:var(--teal-50);color:var(--teal-800);">Week 2 Brief</span>
+      </div>
+      <div class="brief-body">
+        <div class="brief-subject">Subject: We need visuals — can you take point on the art this week?</div>
+        <p>Hi! Marcus forwarded me your prototype from last week — honestly, really solid for a first pass. The game concept is interesting. Now I need to put a face on it. I'm the Art Director here at PixelForge, which means I'm responsible for how the entire game looks and feels — every colour choice, every character design, every background.</p>
+        <p>I know you might not be a trained illustrator, and that's totally fine — <strong>that's exactly why we use AI image tools like Flow AI and ChatGPT.</strong> What I need from you is four assets: a main hero character, one villain or obstacle, a game background scene, and a logo. These will go directly into the investor presentation, so they need to feel intentional.</p>
+        <p>The most important thing I look for as an art director isn't whether the AI made something pretty — it's <strong>whether your creative direction is clear.</strong> I can tell immediately when someone just typed "cool character" versus when someone actually thought about who this character is, what they've been through, what colours represent their personality. So write thoughtful prompts. Be specific about colours, style, mood, and posture. </p>
+        <p>One more thing: keep a "prompt diary." Write down every prompt you tried and rate each result 1–5 stars. My senior artists do this every single day — it's how we get better at directing AI tools over time. Don't skip this part.</p>
+        <div class="brief-sign">— Sofia · s.chen@pixelforge.fake · Art Director, 3rd floor</div>
+      </div>
+    </div>
+
+    <div class="scenario-card" style="border-left-color:var(--teal-400);">
+      <h3> Your role: Concept Artist at PixelForge Studios</h3>
+      <p><strong>The situation:</strong> Sofia Chen, PixelForge's Art Director, has just pulled your game concept into the visual pipeline. The investor deck goes live in 5 weeks and they need a visual identity — now. There's no time to commission a traditional illustrator.</p>
+      <p style="margin-top:8px;">This is exactly the kind of moment AI image tools were built for. At studios like <em>Ubisoft</em> and small indie teams around the world, concept artists use AI generators to produce hundreds of character sketches and environments in a single day — then pick the ones that capture the right mood and refine them. Your job is to be the creative director: you decide the look, feel, and personality of every character. The AI just draws what you describe.</p>
+      <p style="margin-top:8px;"><strong>Sofia's golden rule:</strong> "Anyone can click Generate. The difference between a junior and a senior artist is how precisely they can describe what they want." Think carefully before you type.</p>
+    </div>
+
+    <div class="section-label">Your missions this week</div>
+    <div class="steps-grid">
+      <div class="step-card">
+        <div class="step-num" style="background:var(--teal-50);color:var(--teal-600);">1</div>
+        <div class="step-content">
+          <h4>Design your hero character</h4>
+          <p>Use an AI image tool and prompt: <em>"A cartoon game hero character, young adventurer with a backpack, pixel art style, bright colours, facing forward."</em> Generate 4 versions and pick your favourite.</p>
+          <div class="tool-chips">
+            <span class="tool-chip" style="background:var(--teal-50);color:var(--teal-800);"><i class="ti ti-photo"></i> Flow AI</span>
+            <span class="tool-chip" style="background:var(--teal-50);color:var(--teal-800);"><i class="ti ti-photo"></i> ChatGPT</span>
+          </div>
+        </div>
+      </div>
+      <div class="step-card">
+        <div class="step-num" style="background:var(--teal-50);color:var(--teal-600);">2</div>
+        <div class="step-content">
+          <h4>Create a villain or obstacle</h4>
+          <p>Design an enemy or challenge for your game. Try: <em>"A spooky forest guardian monster, cartoon style, glowing green eyes, dark purple colours, simple shapes for a 2D game."</em></p>
+          <div class="tool-chips">
+            <span class="tool-chip" style="background:var(--teal-50);color:var(--teal-800);"><i class="ti ti-photo"></i> Flow AI</span>
+          </div>
+        </div>
+      </div>
+      <div class="step-card">
+        <div class="step-num" style="background:var(--teal-50);color:var(--teal-600);">3</div>
+        <div class="step-content">
+          <h4>Generate a game background</h4>
+          <p>Create the world your game lives in. Try: <em>"A wide 2D side-scrolling game background, ancient jungle temple with glowing ruins, sunset sky, cartoon illustration style."</em></p>
+          <div class="tool-chips">
+            <span class="tool-chip" style="background:var(--teal-50);color:var(--teal-800);"><i class="ti ti-photo"></i> ChatGPT</span>
+          </div>
+        </div>
+      </div>
+      <div class="step-card">
+        <div class="step-num" style="background:var(--teal-50);color:var(--teal-600);">4</div>
+        <div class="step-content">
+          <h4>Design a game logo</h4>
+          <p>Ask AI for a logo: <em>"Game logo for a game called [your game name], bold cartoon font, lightning bolt icon, purple and gold colour scheme, dark background."</em> Add it to your HTML game!</p>
+          <div class="tool-chips">
+            <span class="tool-chip" style="background:var(--teal-50);color:var(--teal-800);"><i class="ti ti-photo"></i> Flow AI</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-label">AI tools for this week</div>
+    <div class="ai-tools">
+      <div class="tool-card">
+        <div class="tool-type" style="color:var(--teal-600);">AI Image</div>
+        <div class="tool-name">Flow AI</div>
+        <div class="tool-use">Generate characters, backgrounds, and game environments from text prompts.</div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-type" style="color:var(--teal-600);">AI Image</div>
+        <div class="tool-name">ChatGPT</div>
+        <div class="tool-use">Use DALL-E via ChatGPT to generate logos, characters, and game art.</div>
+      </div>
+    </div>
+
+    <div class="section-label">Deliverables — what to submit</div>
+    <div class="deliverable-box">
+      <div class="deliverable-row"><div class="del-check"></div><span>3 AI-generated images: hero, villain, and background</span></div>
+      <div class="deliverable-row"><div class="del-check"></div><span>A game logo created with AI tools</span></div>
+      <div class="deliverable-row"><div class="del-check"></div><span>A "prompt diary" — write the exact prompts you used and rate each result 1–5 stars</span></div>
+    </div>
+
+    <div class="tip-box" style="background:var(--teal-50);">
+      <i class="ti ti-bulb" style="color:var(--teal-600);"></i>
+      <p style="color:var(--teal-800);"><strong>Prompt power tip:</strong> Be super specific! Instead of "a hero," try <em>"a 12-year-old girl with red braids wearing silver armour, holding a glowing blue shield, pixel art style, facing right."</em> More detail = better art!</p>
+    </div>
+  </div>
+
+  <!-- ===== WEEK 3 ===== -->
+  <div class="week-panel" id="week-3">
+    <div class="week-header">
+      <div class="week-icon" style="background:var(--blue-50);"></div>
+      <div class="week-title">
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px;">Week 3 of 4</div>
+        <h2>Bring it to life with AI video</h2>
+        <p>Create a game trailer, cutscene, or tutorial video using AI video tools — no filming required!</p>
+        <span class="week-tag" style="background:var(--blue-50);color:var(--blue-600);">AI Video</span>
+      </div>
+    </div>
+
+    <div class="progress-wrap"><div class="progress-bar" style="width:75%"></div></div>
+    <div class="progress-label">Week 3 of 4 — 75% of project complete</div>
+
+    <div class="section-label">Your brief this week</div>
+    <div class="brief-card">
+      <div class="brief-header">
+        <div class="brief-avatar" style="background:var(--accent);">JO</div>
+        <div class="brief-meta">
+          <div class="bm-name">Jordan Okafor</div>
+          <div class="bm-role">Marketing Manager · PixelForge Studios</div>
+        </div>
+        <span class="brief-tag" style="background:var(--blue-50);color:var(--blue-800);">Week 3 Brief</span>
+      </div>
+      <div class="brief-body">
+        <div class="brief-subject">Subject: URGENT — we need a trailer before the investor meeting!</div>
+        <p>Hey! I just got out of a call with Aisha — the investor meeting is in two weeks and I need something big from you. Sofia showed me the character art and honestly? It looks great. Now we need to show it off. I need <strong>a 30-second game trailer</strong> to open the investor presentation — something that makes people go "wait, I actually want to play that."</p>
+        <p>Here's how I'd approach it: start with the script. Think about it like a movie trailer — hook people in the first 3 seconds, show a taste of the gameplay in the middle, and land a punchy line at the end. Ask an AI to draft the script, then rewrite it in your own words so it sounds like your game, not a template. Then use Canva or Runway to animate Sofia's art into short video clips. If you can layer in a voiceover from ElevenLabs, even better — a good narrator voice makes everything feel 10x more professional.</p>
+        <p>One thing I always say to my team: <strong>the investors are going to ask "who made this?" The answer should be "I directed it, and AI helped me execute it."</strong> You are the creative lead on this trailer. Own it. Keep your script draft, save your video exports, and write a quick note about what each tool did and didn't do well. That documentation is gold for our studio portfolio.</p>
+        <p>Don't stress if it's not Hollywood quality — these investors fund indie games, not blockbusters. They want to see passion and a clear idea. You've got both. Go!</p>
+        <div class="brief-sign">— Jordan · j.okafor@pixelforge.fake · Marketing Manager</div>
+      </div>
+    </div>
+
+    <div class="scenario-card" style="border-left-color:var(--blue-400);">
+      <h3> Your role: Game Marketing Director at PixelForge Studios</h3>
+      <p><strong>The situation:</strong> Jordan Okafor just sent you an urgent Slack message: the investor meeting got moved up. PixelForge needs a game trailer — not next week, not tomorrow, by Friday. Jordan is depending on you to produce something that makes investors lean forward in their seats and say "I want to play that."</p>
+      <p style="margin-top:8px;">This is real pressure, and it's exactly the kind of pressure game marketing teams face constantly. When Minecraft or Among Us drops a new update, their marketing teams produce trailers in days, not months. Studios like <em>Devolver Digital</em> are famous for their creative, punchy trailers — and many are made with lean teams using fast tools. Now you're that team.</p>
+      <p style="margin-top:8px;"><strong>Your job:</strong> You're the director. You decide the pacing, the tone, what the viewer sees first, and how it ends. The AI tools — Canva, Runway, ElevenLabs — are your production crew. Give them clear instructions, review every output critically, and assemble the final cut. Remember: <em>a bad trailer can kill interest in a great game. A great trailer can sell a simple game.</em></p>
+    </div>
+
+    <div class="section-label">Your missions this week</div>
+    <div class="steps-grid">
+      <div class="step-card">
+        <div class="step-num" style="background:var(--blue-50);color:var(--blue-600);">1</div>
+        <div class="step-content">
+          <h4>Write a trailer script with AI</h4>
+          <p>Ask an AI: <em>"Write a 30-second exciting game trailer script for a jungle adventure game where players collect ancient coins. Include a hook, gameplay description, and exciting ending line."</em></p>
+          <div class="tool-chips">
+            <span class="tool-chip" style="background:var(--blue-50);color:var(--blue-800);"><i class="ti ti-sparkles"></i> ChatGPT</span>
+          </div>
+        </div>
+      </div>
+      <div class="step-card">
+        <div class="step-num" style="background:var(--blue-50);color:var(--blue-600);">2</div>
+        <div class="step-content">
+          <h4>Generate animated game scenes</h4>
+          <p>Use an AI video generator to create short clips of your game world. Try: <em>"A cartoon game character running through a glowing jungle, side-scrolling animation, vibrant colours, looping."</em></p>
+          <div class="tool-chips">
+            <span class="tool-chip" style="background:var(--blue-50);color:var(--blue-800);"><i class="ti ti-video"></i> Canva Video</span>
+            <span class="tool-chip" style="background:var(--blue-50);color:var(--blue-800);"><i class="ti ti-video"></i> Runway ML</span>
+          </div>
+        </div>
+      </div>
+      <div class="step-card">
+        <div class="step-num" style="background:var(--blue-50);color:var(--blue-600);">3</div>
+        <div class="step-content">
+          <h4>Add AI voiceover or narration</h4>
+          <p>Use an AI voice tool to record your trailer script as a dramatic voiceover. Or use Canva's text-to-speech. Add it to your video clips for a professional feel!</p>
+          <div class="tool-chips">
+            <span class="tool-chip" style="background:var(--blue-50);color:var(--blue-800);"><i class="ti ti-microphone"></i> ElevenLabs (free)</span>
+          </div>
+        </div>
+      </div>
+      <div class="step-card">
+        <div class="step-num" style="background:var(--blue-50);color:var(--blue-600);">4</div>
+        <div class="step-content">
+          <h4>Assemble your game trailer</h4>
+          <p>Put your AI images (week 2) and AI video clips together in Canva. Add your voiceover, title card with your game logo, and a final "Coming Soon" frame. Export as MP4!</p>
+          <div class="tool-chips">
+            <span class="tool-chip" style="background:var(--blue-50);color:var(--blue-800);"><i class="ti ti-edit-circle"></i> Canva (free)</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-label">AI tools for this week</div>
+    <div class="ai-tools">
+      <div class="tool-card">
+        <div class="tool-type" style="color:var(--blue-600);">AI Video</div>
+        <div class="tool-name">Canva Video AI</div>
+        <div class="tool-use">Free student access. Animate slides and images into a smooth video.</div>
+      </div>
+      <div class="tool-card">
+        <div class="tool-type" style="color:var(--blue-600);">AI Voice</div>
+        <div class="tool-name">ElevenLabs (free)</div>
+        <div class="tool-use">Turn your script into a dramatic game narrator voice in seconds.</div>
+      </div>
+    </div>
+
+    <div class="section-label">Deliverables — what to submit</div>
+    <div class="deliverable-box">
+      <div class="deliverable-row"><div class="del-check"></div><span>A 30-second game trailer video (MP4 or link)</span></div>
+      <div class="deliverable-row"><div class="del-check"></div><span>The AI-written trailer script with your edits highlighted</span></div>
+      <div class="deliverable-row"><div class="del-check"></div><span>A short reflection: "What was the hardest part of making the video?"</span></div>
+    </div>
+
+    <div class="tip-box" style="background:var(--blue-50);">
+      <i class="ti ti-bulb" style="color:var(--blue-600);"></i>
+      <p style="color:var(--blue-800);"><strong>Video tip:</strong> Keep your trailer short and exciting! The best game trailers show the most exciting moment first to grab attention. Think about what makes your game special — lead with that!</p>
+    </div>
+  </div>
+
+  <!-- ===== WEEK 4 ===== -->
+  <div class="week-panel" id="week-4">
+    <div class="week-header">
+      <div class="week-icon" style="background:var(--amber-50);"></div>
+      <div class="week-title">
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px;">Week 4 of 4</div>
+        <h2>Present your game to the world</h2>
+        <p>Put everything together, create a game pitch deck, and present your AI-powered game concept!</p>
+        <span class="week-tag" style="background:var(--amber-50);color:var(--amber-800);">Final Project</span>
+      </div>
+    </div>
+
+    <div class="progress-wrap"><div class="progress-bar" style="width:100%;background:linear-gradient(90deg,var(--amber-400),var(--amber-600));"></div></div>
+    <div class="progress-label">Week 4 of 4 — 100% complete </div>
+
+    <div class="section-label">Your brief this week</div>
+    <div class="brief-card">
+      <div class="brief-header">
+        <div class="brief-avatar" style="background:var(--accent);">AP</div>
+        <div class="brief-meta">
+          <div class="bm-name">Aisha Patel</div>
+          <div class="bm-role">CEO & Co-Founder · PixelForge Studios</div>
+        </div>
+        <span class="brief-tag" style="background:var(--amber-50);color:var(--amber-900);">Week 4 Brief</span>
+      </div>
+      <div class="brief-body">
+        <div class="brief-subject">Subject: The big day — time to pitch everything you've built</div>
+        <p>Hi there! I'm Aisha — I co-founded PixelForge five years ago out of a bedroom in Singapore with one laptop and too much caffeine. I don't usually write directly to junior team members, but I've been watching this project closely and I wanted you to hear from me directly.</p>
+        <p>Marcus showed me the prototype. Sofia walked me through the character designs. Jordan played me the trailer on his phone in the hallway. I have to tell you — for someone who joined this project two weeks ago and used AI tools most people are still figuring out, what you've put together is genuinely impressive. Not because it's technically perfect. Because it has a <em>point of view.</em></p>
+        <p>Now comes the most important part: <strong>the pitch.</strong> On Friday, you'll present to our investor panel. These are people who've funded twenty games in the last three years — they've heard a thousand pitches. They know when someone truly believes in what they built, and when someone's just reading slides. Don't just read slides.</p>
+        <p>Tell them the story of your game. Who plays it. Why it matters. What you built. How AI helped — and where you had to take over because the AI wasn't good enough. That last part is especially important. I need you to write a one-page reflection on working with AI: <strong>what it did well, where it fell short, and what you learned.</strong> This isn't a test. This is exactly the kind of thinking I want from every person at this company. The studios that understand AI honestly are the ones still standing a decade from now.</p>
+        <p>You've earned your spot on this stage. Now go take it.</p>
+        <div class="brief-sign">— Aisha · aisha.p@pixelforge.fake · Co-Founder & CEO, PixelForge Studios</div>
+      </div>
+    </div>
+
+    <div class="scenario-card" style="border-left-color:var(--amber-400);">
+      <h3> Your role: Lead Presenter at the PixelForge Investor Demo Day</h3>
+      <p><strong>The situation:</strong> Demo Day is here. The PixelForge conference room is set up. Three investors are flying in this afternoon. Marcus, Sofia, Jordan, and Aisha are all counting on you to walk into that room and sell this game.</p>
+      <p style="margin-top:8px;">This is what it all comes down to. Every real game ever made went through a moment like this — a pitch. <em>Minecraft</em> was pitched to a Swedish games conference in 2009 before it had a single player. <em>Among Us</em> almost got cancelled before its fanbase discovered it years after launch. <em>Hollow Knight</em> raised $57,000 from backers who only saw sketches and a short video. The idea had to be communicated clearly and passionately before the game was even finished.</p>
+      <p style="margin-top:8px;">Now it's your turn. You have your game design, your art, your trailer — and AI is here to help you build the pitch deck and prep for the hard questions. But the most important thing in that room? <strong>Your voice, your story, your honesty about what you built and how.</strong></p>
+      <p style="margin-top:8px;">Aisha asked specifically for a reflection on AI's role in this project — not because she doubts you, but because she knows the studios that understand AI honestly are the ones that will still be around in 10 years. Be thoughtful. Be real.</p>
+    </div>
+
+    <div class="section-label">Your missions this week</div>
+    <div class="steps-grid">
+      <div class="step-card">
+        <div class="step-num" style="background:var(--amber-50);color:var(--amber-800);">1</div>
+        <div class="step-content">
+          <h4>Build a game pitch presentation</h4>
+          <p>Ask AI: <em>"Help me write slides for a game pitch presentation. Sections: game overview, target audience, main character, gameplay loop, why players will love it."</em> Use Canva with your AI art to make it look amazing!</p>
+          <div class="tool-chips">
+            <span class="tool-chip" style="background:var(--amber-50);color:var(--amber-900);"><i class="ti ti-presentation"></i> ChatGPT</span>
+          </div>
+        </div>
+      </div>
+      <div class="step-card">
+        <div class="step-num" style="background:var(--amber-50);color:var(--amber-800);">2</div>
+        <div class="step-content">
+          <h4>Create a "game page" website</h4>
+          <p>Ask Claude or ChatGPT: <em>"Build me a simple HTML game page with a header showing my game logo, a short description, my game trailer, and a gallery of character art."</em> Plug in your Week 1 code as a demo!</p>
+          <div class="tool-chips">
+            <span class="tool-chip" style="background:var(--amber-50);color:var(--amber-900);"><i class="ti ti-code"></i> Claude AI</span>
+          </div>
+        </div>
+      </div>
+      <div class="step-card">
+        <div class="step-num" style="background:var(--amber-50);color:var(--amber-800);">3</div>
+        <div class="step-content">
+          <h4>Write a "developer interview" with AI</h4>
+          <p>Ask AI to interview you: <em>"Ask me 5 questions a journalist might ask a 12-year-old game developer."</em> Answer the questions yourself, then compile it into a fun Q&A page for your portfolio.</p>
+          <div class="tool-chips">
+            <span class="tool-chip" style="background:var(--amber-50);color:var(--amber-900);"><i class="ti ti-sparkles"></i> ChatGPT</span>
+          </div>
+        </div>
+      </div>
+      <div class="step-card">
+        <div class="step-num" style="background:var(--amber-50);color:var(--amber-800);">4</div>
+        <div class="step-content">
+          <h4>Reflect on what AI can and can't do</h4>
+          <p>Write a 1-page reflection answering: Which AI tool was most useful? What did AI get wrong that you had to fix? What does AI still need humans for? What would you build next?</p>
+          <div class="tool-chips">
+            <span class="tool-chip" style="background:var(--amber-50);color:var(--amber-900);"><i class="ti ti-pencil"></i> You (no AI!)</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-label">Final deliverables — your complete portfolio</div>
+    <div class="deliverable-box">
+      <div class="deliverable-row">
+        <div class="del-check"><i class="ti ti-star" style="font-size:12px;color:var(--accent);"></i></div>
+        <span><strong>Week 1:</strong> Game design doc + working HTML game</span>
+      </div>
+      <div class="deliverable-row">
+        <div class="del-check"><i class="ti ti-star" style="font-size:12px;color:var(--accent);"></i></div>
+        <span><strong>Week 2:</strong> AI art gallery (hero, villain, background, logo) + prompt diary</span>
+      </div>
+      <div class="deliverable-row">
+        <div class="del-check"><i class="ti ti-star" style="font-size:12px;color:var(--accent);"></i></div>
+        <span><strong>Week 3:</strong> 30-second game trailer video</span>
+      </div>
+      <div class="deliverable-row">
+        <div class="del-check"><i class="ti ti-star" style="font-size:12px;color:var(--accent);"></i></div>
+        <span><strong>Week 4:</strong> Game pitch presentation + 1-page reflection</span>
+      </div>
+      <div class="deliverable-row">
+        <div class="del-check"><i class="ti ti-trophy" style="font-size:12px;color:var(--accent);"></i></div>
+        <span><strong>Bonus:</strong> Live game demo or game website page</span>
+      </div>
+    </div>
+
+    <div class="tip-box" style="background:var(--amber-50);">
+      <i class="ti ti-rocket" style="color:var(--amber-800);"></i>
+      <p style="color:var(--amber-900);"><strong>You made a game with AI — that's incredible!</strong> Remember: every great game developer started exactly where you are. The AI helped you build it faster, but your creativity, ideas, and decisions made it yours. Keep going — you're just getting started! </p>
+    </div>
+  </div>
+
+  </div><!-- /panels-wrap -->
+
+  <!-- FOOTER -->
+  <div class="footer">
+    <p><strong>Generative AI in Gaming — 4-Week Student Project</strong><br>
+    Use AI tools responsibly, always tell your teacher which AI helped you, and remember: <em>the best part is your original ideas!</em></p>
+  </div>
+
+</div>
+
+<script>
+  let current = 1;
+
+  function showWeek(n) {
+    if (n === current) return;
+
+    const panels = document.querySelectorAll('.week-panel');
+    const tabs   = document.querySelectorAll('.tab-btn');
+    const prev   = document.getElementById('week-' + current);
+    const next   = document.getElementById('week-' + n);
+
+    // Fade out current panel
+    prev.classList.remove('active');
+
+    // Short delay so the outgoing panel fades, then bring in the new one
+    setTimeout(() => {
+      next.classList.add('active');
+    }, 120);
+
+    // Update tabs immediately
+    tabs.forEach(b => b.classList.remove('active'));
+    tabs[n - 1].classList.add('active');
+
+    current = n;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+</script>
+</body>
+</html>
