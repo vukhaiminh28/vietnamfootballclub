@@ -1,0 +1,1572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>VIETNAM FOOTBALL CLUB 2005</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body {
+    width:100%; height:100%;
+    background:#000;
+    font-family:'Courier New', monospace;
+    overflow:hidden;
+    image-rendering: pixelated;
+  }
+  #outerStage {
+    position:fixed;
+    top:0; left:0;
+    width:100vw; height:100vh;
+    background:#000;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    overflow:hidden;
+  }
+  #screenWrap {
+    position:relative;
+    width:800px; height:600px;
+    background:#000;
+    border:8px solid #2a2a2a;
+    box-shadow: 0 0 0 4px #555, 0 0 30px #000 inset, 0 0 40px rgba(0,255,0,0.15);
+    transform-origin: center center;
+  }
+  canvas {
+    position:absolute; top:0; left:0;
+    width:800px; height:600px;
+    display:block;
+  }
+  /* CRT overlay */
+  #crt {
+    position:absolute; top:0; left:0; width:100%; height:100%;
+    pointer-events:none;
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(0,0,0,0.18) 0px,
+      rgba(0,0,0,0.18) 1px,
+      rgba(0,0,0,0) 2px,
+      rgba(0,0,0,0) 3px
+    );
+    mix-blend-mode: multiply;
+    z-index:50;
+  }
+  #vignette {
+    position:absolute; top:0; left:0; width:100%; height:100%;
+    pointer-events:none;
+    background: radial-gradient(ellipse at center, rgba(0,0,0,0) 55%, rgba(0,0,0,0.55) 100%);
+    z-index:51;
+  }
+  #flicker {
+    position:absolute; top:0; left:0; width:100%; height:100%;
+    pointer-events:none;
+    background: rgba(255,255,255,0.02);
+    z-index:52;
+    animation: flickerAnim 0.18s infinite;
+  }
+  @keyframes flickerAnim {
+    0% { opacity:0.4; }
+    50% { opacity:0.7; }
+    100% { opacity:0.4; }
+  }
+</style>
+</head>
+<body>
+
+<div id="outerStage">
+  <div id="screenWrap">
+    <canvas id="game" width="800" height="600"></canvas>
+    <div id="crt"></div>
+    <div id="vignette"></div>
+    <div id="flicker"></div>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+const W = canvas.width, H = canvas.height;
+
+// ----------------------------------------------------------------
+// FULL-BROWSER RESPONSIVE SCALING
+// Internal drawing resolution stays a fixed 800x600 (so every hand-tuned
+// layout coordinate in this file remains correct). The #screenWrap element
+// is scaled via CSS transform to fill the actual browser viewport, using a
+// "cover" fit so the game fills the window edge-to-edge with no black bars.
+// ----------------------------------------------------------------
+const screenWrap = document.getElementById('screenWrap');
+function fitToWindow(){
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  // "cover" scale: fill the viewport completely, cropping slight overflow
+  // on whichever axis doesn't match the 800x600 aspect ratio.
+  const scale = Math.max(vw / W, vh / H);
+  screenWrap.style.transform = `scale(${scale})`;
+}
+window.addEventListener('resize', fitToWindow);
+window.addEventListener('orientationchange', fitToWindow);
+fitToWindow();
+
+// ----------------------------------------------------------------
+// GLOBAL STATE
+// ----------------------------------------------------------------
+let STATE = "BOOT"; // BOOT, TEAMSELECT, OPPSELECT, MATCH, FULLTIME
+let bootTimer = 0;
+let frame = 0;
+
+const TEAMS = [
+  { name: "Fake Madrid",   primary: "#ffffff", secondary: "#3355cc", text:"#222" },
+  { name: "Varalona",      primary: "#a4123f", secondary: "#1a2a6c", text:"#fff" },
+  { name: "Man Đỏ",        primary: "#d31027", secondary: "#000000", text:"#fff" },
+  { name: "Pháo Thủ",      primary: "#cc0000", secondary: "#ffffff", text:"#fff" },
+  { name: "Man Xanh",      primary: "#6cabdd", secondary: "#1c2c54", text:"#fff" },
+  { name: "Liverpull",     primary: "#c8102e", secondary: "#00b2a9", text:"#fff" },
+  { name: "ATM Madrid",    primary: "#cb3524", secondary: "#ffffff", text:"#fff" },
+  { name: "Phờ Sài Gòn",   primary: "#f7b500", secondary: "#1b5e20", text:"#222" }
+];
+
+let selectedIndex = 0;
+let selectedOppIndex = 0;
+let playerTeamIdx = 0;
+let playerTeam = null;
+let aiTeam = null;
+
+// ----------------------------------------------------------------
+// AUDIO (simple WebAudio beeps - no external libs)
+// ----------------------------------------------------------------
+let actx = null;
+function ensureAudio(){
+  if (!actx) {
+    try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e){ actx = null; }
+  }
+}
+function beep(freq, dur, type, vol){
+  if (!actx) return;
+  try {
+    const osc = actx.createOscillator();
+    const gain = actx.createGain();
+    osc.type = type || "square";
+    osc.frequency.value = freq;
+    gain.gain.value = (vol !== undefined ? vol : 0.08);
+    osc.connect(gain);
+    gain.connect(actx.destination);
+    osc.start();
+    gain.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + dur);
+    osc.stop(actx.currentTime + dur);
+  } catch(e){}
+}
+function sfxMenuMove(){ beep(220, 0.06, "square", 0.06); }
+function sfxMenuSelect(){ beep(440, 0.12, "square", 0.08); }
+function sfxKick(){ beep(150, 0.08, "triangle", 0.12); }
+function sfxGoal(){
+  beep(523,0.12,"square",0.1);
+  setTimeout(()=>beep(659,0.12,"square",0.1),120);
+  setTimeout(()=>beep(784,0.18,"square",0.1),240);
+}
+function sfxWhistle(){ beep(1200, 0.25, "sawtooth", 0.05); }
+function sfxBounce(){ beep(300, 0.04, "triangle", 0.05); }
+
+// ----------------------------------------------------------------
+// INPUT
+// ----------------------------------------------------------------
+const keys = {};
+window.addEventListener('keydown', (e) => {
+  ensureAudio();
+  if (["ArrowLeft","ArrowRight","ArrowUp","ArrowDown"," ","Spacebar"].includes(e.key) || e.code === "Space") {
+    e.preventDefault();
+  }
+  keys[e.key] = true;
+  if (e.code === "Space") keys["Space"] = true;
+
+  handleMenuInput(e);
+});
+window.addEventListener('keyup', (e) => {
+  keys[e.key] = false;
+  if (e.code === "Space") keys["Space"] = false;
+});
+
+function handleMenuInput(e){
+  if (STATE === "BOOT") {
+    if (bootTimer > 20) goToTeamSelect();
+  } else if (STATE === "TEAMSELECT") {
+    if (e.key === "ArrowRight") {
+      selectedIndex = (selectedIndex + 1) % TEAMS.length;
+      sfxMenuMove();
+    } else if (e.key === "ArrowLeft") {
+      selectedIndex = (selectedIndex - 1 + TEAMS.length) % TEAMS.length;
+      sfxMenuMove();
+    } else if (e.key === "Enter" || e.code === "Space") {
+      sfxMenuSelect();
+      goToOppSelect(selectedIndex);
+    }
+  } else if (STATE === "OPPSELECT") {
+    if (e.key === "ArrowRight") {
+      do { selectedOppIndex = (selectedOppIndex + 1) % TEAMS.length; } while (selectedOppIndex === playerTeamIdx);
+      sfxMenuMove();
+    } else if (e.key === "ArrowLeft") {
+      do { selectedOppIndex = (selectedOppIndex - 1 + TEAMS.length) % TEAMS.length; } while (selectedOppIndex === playerTeamIdx);
+      sfxMenuMove();
+    } else if (e.key === "Enter" || e.code === "Space") {
+      sfxMenuSelect();
+      startMatch(playerTeamIdx, selectedOppIndex);
+    } else if (e.key === "Escape" || e.key === "Backspace") {
+      sfxMenuMove();
+      STATE = "TEAMSELECT";
+    }
+  } else if (STATE === "FULLTIME") {
+    if (e.key === "Enter" || e.code === "Space") {
+      sfxMenuSelect();
+      goToTeamSelect();
+    }
+  }
+}
+
+// Mouse/touch support for buttons drawn on canvas (Play Again, team select)
+canvas.addEventListener('click', (e) => {
+  ensureAudio();
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = W / rect.width;
+  const scaleY = H / rect.height;
+  const mx = (e.clientX - rect.left) * scaleX;
+  const my = (e.clientY - rect.top) * scaleY;
+
+  if (STATE === "BOOT") {
+    goToTeamSelect();
+  } else if (STATE === "TEAMSELECT") {
+    // check team grid clicks
+    const gridResult = teamGridHit(mx, my);
+    if (gridResult !== -1) {
+      selectedIndex = gridResult;
+      sfxMenuSelect();
+      goToOppSelect(selectedIndex);
+    }
+    // check arrows
+    if (mx > 40 && mx < 100 && my > 470 && my < 520) {
+      selectedIndex = (selectedIndex - 1 + TEAMS.length) % TEAMS.length;
+      sfxMenuMove();
+    } else if (mx > 700 && mx < 760 && my > 470 && my < 520) {
+      selectedIndex = (selectedIndex + 1) % TEAMS.length;
+      sfxMenuMove();
+    }
+  } else if (STATE === "OPPSELECT") {
+    const gridResult = teamGridHit(mx, my);
+    if (gridResult !== -1 && gridResult !== playerTeamIdx) {
+      selectedOppIndex = gridResult;
+      sfxMenuSelect();
+      startMatch(playerTeamIdx, selectedOppIndex);
+    }
+    if (mx > 40 && mx < 100 && my > 470 && my < 520) {
+      do { selectedOppIndex = (selectedOppIndex - 1 + TEAMS.length) % TEAMS.length; } while (selectedOppIndex === playerTeamIdx);
+      sfxMenuMove();
+    } else if (mx > 700 && mx < 760 && my > 470 && my < 520) {
+      do { selectedOppIndex = (selectedOppIndex + 1) % TEAMS.length; } while (selectedOppIndex === playerTeamIdx);
+      sfxMenuMove();
+    }
+    // back button
+    if (mx > 20 && mx < 130 && my > 10 && my < 55) {
+      sfxMenuMove();
+      STATE = "TEAMSELECT";
+    }
+  } else if (STATE === "FULLTIME") {
+    if (mx > 300 && mx < 500 && my > 420 && my < 470) {
+      sfxMenuSelect();
+      goToTeamSelect();
+    }
+  }
+});
+
+let teamGridRects = [];
+function teamGridHit(mx,my){
+  for (let i=0;i<teamGridRects.length;i++){
+    const r = teamGridRects[i];
+    if (mx>=r.x && mx<=r.x+r.w && my>=r.y && my<=r.y+r.h) return r.idx;
+  }
+  return -1;
+}
+
+// ----------------------------------------------------------------
+// PIXEL HELPERS
+// ----------------------------------------------------------------
+function pixelRect(x,y,w,h,color){
+  ctx.fillStyle = color;
+  ctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h));
+}
+function pixelText(text, x, y, size, color, align){
+  ctx.fillStyle = color;
+  ctx.font = size + "px 'Courier New', monospace";
+  ctx.textAlign = align || "left";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, Math.round(x), Math.round(y));
+}
+function pixelTextShadow(text, x, y, size, color, shadowColor, align){
+  ctx.font = size + "px 'Courier New', monospace";
+  ctx.textAlign = align || "left";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = shadowColor;
+  ctx.fillText(text, Math.round(x)+2, Math.round(y)+2);
+  ctx.fillStyle = color;
+  ctx.fillText(text, Math.round(x), Math.round(y));
+}
+
+// ----------------------------------------------------------------
+// BOOT SCREEN
+// ----------------------------------------------------------------
+function drawBootScreen(){
+  pixelRect(0,0,W,H,"#000");
+
+  // scrolling stars / static noise effect
+  for (let i=0;i<40;i++){
+    const nx = (i*53 + frame*2) % W;
+    const ny = (i*97) % H;
+    pixelRect(nx, ny, 2, 2, "rgba(0,255,0,0.08)");
+  }
+
+  const pulse = 0.5 + 0.5*Math.sin(frame*0.1);
+
+  pixelTextShadow("VIETNAM FOOTBALL CLUB", W/2, 220, 42, "#ffd700", "#5c3d00", "center");
+  pixelTextShadow("2 0 0 5", W/2, 280, 48, "#ffffff", "#444444", "center");
+
+  pixelRect(W/2 - 220, 320, 440, 4, "#0f0");
+
+  pixelText("RETRO 8-BIT SOCCER ARCADE", W/2, 360, 14, "#0f0", "center");
+
+  if (bootTimer > 18) {
+    ctx.globalAlpha = pulse;
+    pixelText("PRESS ANY KEY / CLICK TO START", W/2, 460, 16, "#fff", "center");
+    ctx.globalAlpha = 1;
+  } else {
+    pixelText("LOADING" + ".".repeat((frame/8)%4|0), W/2, 460, 16, "#888", "center");
+  }
+
+  pixelText("(C) 2005 SAIGON PIXEL SOFTWORKS -- MADE FOR CRT MONITORS", W/2, 560, 10, "#444", "center");
+
+  bootTimer++;
+  if (bootTimer > 600) goToTeamSelect();
+}
+
+function goToTeamSelect(){
+  STATE = "TEAMSELECT";
+}
+
+function goToOppSelect(teamIdx){
+  playerTeamIdx = teamIdx;
+  selectedOppIndex = (teamIdx + 1) % TEAMS.length;
+  STATE = "OPPSELECT";
+}
+
+// any key triggers boot->teamselect too
+window.addEventListener('keydown', () => {
+  if (STATE === "BOOT") goToTeamSelect();
+});
+
+// ----------------------------------------------------------------
+// SHARED TEAM GRID DRAWING (used by both select screens)
+// ----------------------------------------------------------------
+function drawTeamGrid(highlightIdx, disabledIdx){
+  teamGridRects = [];
+  const cols = 4;
+  const rows = 2;
+  const cellW = 170, cellH = 160;
+  const gridW = cols*cellW;
+  const startX = (W - gridW)/2;
+  const startY = 100;
+
+  for (let i=0;i<TEAMS.length;i++){
+    const col = i % cols;
+    const row = Math.floor(i/cols);
+    const x = startX + col*cellW;
+    const y = startY + row*cellH;
+    const t = TEAMS[i];
+    const isSel = (i === highlightIdx);
+    const isDisabled = (i === disabledIdx);
+
+    if (!isDisabled) {
+      teamGridRects.push({x:x+8,y:y+8,w:cellW-16,h:cellH-16,idx:i});
+    }
+
+    // card background
+    pixelRect(x+8, y+8, cellW-16, cellH-16, isDisabled ? "#0d0d18" : (isSel ? "#333" : "#161626"));
+    ctx.lineWidth = isSel ? 4 : 2;
+    ctx.strokeStyle = isDisabled ? "#2a2a3a" : (isSel ? "#ffd700" : "#444466");
+    ctx.strokeRect(x+8, y+8, cellW-16, cellH-16);
+
+    // jersey icon (simple pixel block jersey)
+    const jx = x + cellW/2;
+    const jy = y + 55;
+    ctx.globalAlpha = isDisabled ? 0.25 : 1;
+    pixelRect(jx-22, jy-22, 44, 40, t.primary);
+    pixelRect(jx-22, jy-22, 44, 10, t.secondary);
+    pixelRect(jx-6, jy-22, 12, 40, t.secondary);
+    ctx.globalAlpha = 1;
+
+    pixelText(t.name, jx, y + 120, 13, isDisabled ? "#444455" : (isSel ? "#ffd700" : "#cccccc"), "center");
+
+    if (isDisabled) {
+      pixelText("TAKEN", jx, y + 138, 10, "#666677", "center");
+    }
+
+    if (isSel && !isDisabled) {
+      // bouncing arrow
+      const bounce = Math.sin(frame*0.2)*4;
+      pixelText("▼", jx, y + 2 + bounce, 16, "#ffd700", "center");
+    }
+  }
+}
+
+// ----------------------------------------------------------------
+// TEAM SELECTION SCREEN (PLAYER'S TEAM)
+// ----------------------------------------------------------------
+function drawTeamSelectScreen(){
+  pixelRect(0,0,W,H,"#0a0a1a");
+
+  // header bar
+  pixelRect(0,0,W,70,"#1a1a3a");
+  pixelRect(0,68,W,2,"#0f0");
+  pixelTextShadow("SELECT YOUR TEAM", W/2, 35, 28, "#ffd700", "#5c3d00", "center");
+
+  drawTeamGrid(selectedIndex, -1);
+
+  // nav arrows
+  pixelText("◀", 65, 495, 30, "#0f0", "center");
+  pixelText("▶", 730, 495, 30, "#0f0", "center");
+
+  // selected info panel
+  const sel = TEAMS[selectedIndex];
+  pixelRect(150, 470, 500, 90, "#161626");
+  ctx.strokeStyle = "#0f0";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(150, 470, 500, 90);
+  pixelText("YOUR TEAM: " + sel.name, W/2, 495, 18, "#fff", "center");
+  ctx.globalAlpha = 0.5 + 0.5*Math.sin(frame*0.15);
+  pixelText("[ ARROWS = CHOOSE TEAM ]  [ SPACE/ENTER = NEXT ]", W/2, 530, 12, "#0f0", "center");
+  ctx.globalAlpha = 1;
+
+  pixelText("STEP 1 OF 2 -- PICK YOUR CLUB", W/2, 590, 10, "#666", "center");
+}
+
+// ----------------------------------------------------------------
+// OPPONENT SELECTION SCREEN
+// ----------------------------------------------------------------
+function drawOppSelectScreen(){
+  pixelRect(0,0,W,H,"#1a0a0a");
+
+  // header bar
+  pixelRect(0,0,W,70,"#3a1a1a");
+  pixelRect(0,68,W,2,"#0f0");
+  pixelTextShadow("SELECT OPPONENT TEAM", W/2, 35, 28, "#ff8844", "#5c2200", "center");
+
+  // back button
+  pixelRect(20,12,110,42,"#222");
+  ctx.strokeStyle = "#888";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(20,12,110,42);
+  pixelText("◀ BACK", 75, 33, 13, "#ccc", "center");
+
+  drawTeamGrid(selectedOppIndex, playerTeamIdx);
+
+  // nav arrows
+  pixelText("◀", 65, 495, 30, "#0f0", "center");
+  pixelText("▶", 730, 495, 30, "#0f0", "center");
+
+  const yourTeam = TEAMS[playerTeamIdx];
+  const opp = TEAMS[selectedOppIndex];
+  pixelRect(150, 470, 500, 90, "#161626");
+  ctx.strokeStyle = "#ff8844";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(150, 470, 500, 90);
+  pixelText(yourTeam.name + "  VS  " + opp.name, W/2, 495, 16, "#fff", "center");
+  ctx.globalAlpha = 0.5 + 0.5*Math.sin(frame*0.15);
+  pixelText("[ ARROWS = CHOOSE OPPONENT ]  [ SPACE/ENTER = KICK OFF ]", W/2, 530, 12, "#0f0", "center");
+  ctx.globalAlpha = 1;
+
+  pixelText("STEP 2 OF 2 -- PICK YOUR RIVAL", W/2, 590, 10, "#666", "center");
+}
+
+// ----------------------------------------------------------------
+// MATCH SETUP
+// ----------------------------------------------------------------
+const PITCH_TOP = 40;
+const PITCH_BOTTOM = 530;
+const GROUND_Y = 490;
+const GOAL_WIDTH = 14;
+const GOAL_HEIGHT = 110;
+const LEFT_GOAL_X = 40;
+const RIGHT_GOAL_X = W - 40 - GOAL_WIDTH;
+
+// ----------------------------------------------------------------
+// TOP-DOWN FULL-SCREEN PROJECTION
+// World space stays simple 2D (x = position along pitch, used by all
+// physics/collision code untouched). For rendering only, we map world
+// x (0..PITCH_WORLD_LEN) and a fixed "lane" (0..1 across pitch width)
+// into screen coordinates that fill the entire play area, top-down style
+// like classic overhead pixel soccer games.
+// ----------------------------------------------------------------
+const FIELD_MARGIN_X = 46;
+const FIELD_MARGIN_TOP = 14;
+const FIELD_MARGIN_BOTTOM = 46;
+const HUD_HEIGHT = 0; // HUD now drawn as an overlay bar at the very top, not reserving canvas space
+const TOPBAR_HEIGHT = 46;
+const FIELD_TOP = TOPBAR_HEIGHT + FIELD_MARGIN_TOP + 36;
+const FIELD_BOTTOM = H - FIELD_MARGIN_BOTTOM;
+const FIELD_LEFT = FIELD_MARGIN_X;
+const FIELD_RIGHT = W - FIELD_MARGIN_X;
+const PITCH_WORLD_LEN = (RIGHT_GOAL_X + GOAL_WIDTH) - LEFT_GOAL_X; // world units along pitch length
+
+// Convert world (u = position along pitch length, v = lane/depth 0..1) to full-screen top-down coords
+function isoProject(u, v){
+  const t = u / PITCH_WORLD_LEN; // 0..1 along pitch length
+  const sx = FIELD_LEFT + t * (FIELD_RIGHT - FIELD_LEFT);
+  const sy = FIELD_TOP + v * (FIELD_BOTTOM - FIELD_TOP);
+  return { x: sx, y: sy };
+}
+
+// Convert a world x (pitch length position) + lane v + a vertical lift (jump/ball height)
+// into final screen draw coordinates.
+function isoScreenPos(worldX, lane, lift){
+  const u = worldX - LEFT_GOAL_X;
+  const p = isoProject(u, lane);
+  return { x: p.x, y: p.y - lift };
+}
+
+let match = null;
+
+// ----------------------------------------------------------------
+// 5-A-SIDE SQUAD LAYOUT
+// Each team = 4 outfield players + 1 goalkeeper. Physics still only cares
+// about worldX + jump height per entity; "lane" (0..1, top..bottom across
+// pitch width) is cosmetic/positional and spreads players out visually and
+// for simple zone-based AI so they don't all clump on one spot.
+// ----------------------------------------------------------------
+const SPRITE_SCALE = 0.62; // shrinks all sprite pixel dimensions to fit a busier 5v5 field
+const OUTFIELD_LANES = [0.18, 0.40, 0.62, 0.84]; // 4 outfield players spread across pitch width
+const GK_LANE = 0.5;
+
+function startMatch(teamIdx, oppIdx){
+  playerTeam = TEAMS[teamIdx];
+  aiTeam = TEAMS[oppIdx];
+
+  const outfieldW = 28*SPRITE_SCALE, outfieldH = 44*SPRITE_SCALE;
+  const gkW = 26*SPRITE_SCALE, gkH = 40*SPRITE_SCALE;
+
+  // Build the human team: 4 outfield players (index 0 is human-controlled) + 1 GK
+  const myOutfield = OUTFIELD_LANES.map((lane, i) => ({
+    x: LEFT_GOAL_X + GOAL_WIDTH + 80 + i*40,
+    y: GROUND_Y, w: outfieldW, h: outfieldH,
+    vx: 0, vy: 0, onGround: true, facing: 1, kickTimer: 0,
+    lane: lane, isHuman: (i === 0), aiThinkTimer: 0,
+    homeX: LEFT_GOAL_X + GOAL_WIDTH + 80 + i*40,
+    number: i + 2 // outfield players wear 2-5, goalkeeper wears 1
+  }));
+  const myGK = {
+    x: LEFT_GOAL_X + 30, y: GROUND_Y, w: gkW, h: gkH,
+    vx: 0, lane: GK_LANE, number: 1
+  };
+
+  // Build the AI team: 4 outfield players + 1 GK, mirrored on the other side
+  const oppOutfield = OUTFIELD_LANES.map((lane, i) => ({
+    x: RIGHT_GOAL_X - 80 - i*40,
+    y: GROUND_Y, w: outfieldW, h: outfieldH,
+    vx: 0, vy: 0, onGround: true, facing: -1, kickTimer: 0,
+    lane: lane, isHuman: false, aiThinkTimer: 0,
+    homeX: RIGHT_GOAL_X - 80 - i*40,
+    number: i + 2
+  }));
+  const oppGK = {
+    x: RIGHT_GOAL_X - 30, y: GROUND_Y, w: gkW, h: gkH,
+    vx: 0, lane: GK_LANE, number: 1
+  };
+
+  match = {
+    timeLeft: 60.0,
+    playerScore: 0,
+    aiScore: 0,
+    kickoffFlash: 90,
+    goalCelebration: 0,
+    celebrationText: "",
+    myTeam: myOutfield,
+    myGK: myGK,
+    oppTeam: oppOutfield,
+    oppGK: oppGK,
+    controlledIndex: 0, // which myTeam[] entry the human currently controls
+    switchCooldown: 0,  // small hysteresis timer so control doesn't flicker between two close players
+    ball: {
+      x: 400, y: GROUND_Y - 10, vx: 0, vy: 0, r: 9*SPRITE_SCALE, onGround: false, lane: 0.5,
+      spin: 0, squash: 0, rotation: 0, laneVel: 0
+    },
+    ended: false
+  };
+  STATE = "MATCH";
+  sfxWhistle();
+}
+
+// ----------------------------------------------------------------
+// MATCH PHYSICS / LOGIC
+// ----------------------------------------------------------------
+const GAME_SPEED = 0.38; // global slowdown multiplier (1.0 = original speed) — slower, more realistic, easier to control
+const GRAVITY = 0.6 * GAME_SPEED;
+const GROUND_FRICTION = 0.85;
+const PLAYER_SPEED = 4.2 * GAME_SPEED;
+const JUMP_FORCE = -10.5 * GAME_SPEED;
+
+function rectsOverlap(ax,ay,aw,ah,bx,by,bw,bh){
+  return ax < bx+bw && ax+aw > bx && ay < by+bh && ay+ah > by;
+}
+
+function updateMatch(dt){
+  if (!match || match.ended) return;
+
+  if (match.kickoffFlash > 0) {
+    match.kickoffFlash--;
+  }
+
+  if (match.goalCelebration > 0) {
+    match.goalCelebration--;
+    if (match.goalCelebration === 0) resetAfterGoal();
+    return; // freeze gameplay during celebration
+  }
+
+  // timer
+  match.timeLeft -= dt;
+  if (match.timeLeft <= 0) {
+    match.timeLeft = 0;
+    endMatch();
+    return;
+  }
+
+  const ball = match.ball;
+
+  // ---- AUTO-SWITCH: control whichever of my 5 players is closest to the ball ----
+  // A small "stickiness" margin keeps you in control of the player you're actively
+  // dribbling with — another teammate has to be clearly closer (not just marginally)
+  // before control hands over, which feels much less twitchy to play.
+  const SWITCH_STICKINESS = 22;
+  if (match.switchCooldown > 0) match.switchCooldown--;
+  if (match.switchCooldown <= 0) {
+    const currentPl = match.myTeam[match.controlledIndex];
+    const currentDist = Math.hypot(ball.x - currentPl.x, ball.y - (currentPl.y - currentPl.h/2));
+    let bestIdx = match.controlledIndex;
+    let bestDist = currentDist;
+    for (let i=0;i<match.myTeam.length;i++){
+      if (i === match.controlledIndex) continue;
+      const pl = match.myTeam[i];
+      const d = Math.hypot(ball.x - pl.x, ball.y - (pl.y - pl.h/2));
+      if (d + SWITCH_STICKINESS < bestDist) { bestDist = d; bestIdx = i; }
+    }
+    if (bestIdx !== match.controlledIndex) {
+      match.controlledIndex = bestIdx;
+      match.switchCooldown = 18; // short lock so control doesn't flicker between near-equal distances
+    }
+  }
+  for (let i=0;i<match.myTeam.length;i++) match.myTeam[i].isHuman = (i === match.controlledIndex);
+  const human = match.myTeam[match.controlledIndex];
+
+  // ---- HUMAN-CONTROLLED PLAYER ----
+  human.vx = 0;
+  if (keys["ArrowLeft"]) { human.vx = -PLAYER_SPEED; human.facing = -1; }
+  if (keys["ArrowRight"]) { human.vx = PLAYER_SPEED; human.facing = 1; }
+  if (keys["ArrowUp"] && human.onGround) {
+    human.vy = JUMP_FORCE;
+    human.onGround = false;
+  }
+  if (keys["Space"] && human.kickTimer <= 0) {
+    human.kickTimer = 18;
+    sfxKick();
+  }
+
+  // ---- UPDATE ALL OUTFIELD PLAYERS (both teams) ----
+  for (let i=0;i<match.myTeam.length;i++) updateOutfieldPlayer(match.myTeam[i], ball, match.myTeam[i].isHuman, false);
+  for (let i=0;i<match.oppTeam.length;i++) updateOutfieldPlayer(match.oppTeam[i], ball, false, true);
+
+  // ---- GOALKEEPERS (track the ball laterally near their own goal) ----
+  updateGoalkeeper(match.myGK, ball, LEFT_GOAL_X + 30, ball.x < 220);
+  updateGoalkeeper(match.oppGK, ball, RIGHT_GOAL_X - 30, ball.x > W - 220);
+
+  // ---- BALL PHYSICS ----
+  // Richer model: gravity with terminal velocity, air drag while airborne,
+  // spin that curves trajectory slightly and drives visual rotation speed,
+  // bounce restitution that scales with impact speed, and separate rolling
+  // friction once the ball settles on the ground. Tuned closer to a real
+  // football: it decelerates noticeably while rolling, loses most of its
+  // energy on each bounce, and curves only subtly from spin.
+  const BALL_TERMINAL_VY = 9 * GAME_SPEED;
+  const AIR_DRAG = 0.997;          // gentle horizontal slowdown while airborne
+  const ROLL_FRICTION = 0.92;      // noticeably stronger slowdown while rolling on grass
+  const SPIN_DECAY = 0.97;
+  const MAGNUS_STRENGTH = 0.005;   // subtle curve from spin, not an exaggerated swerve
+
+  const wasAirborne = ball.y < GROUND_Y - 2;
+
+  // spin-induced curve (Magnus-effect-lite): spin nudges horizontal velocity while airborne
+  if (wasAirborne) {
+    ball.vx += ball.spin * MAGNUS_STRENGTH;
+  }
+
+  ball.x += ball.vx;
+  ball.y += ball.vy;
+  ball.vy += GRAVITY * 0.7;
+  ball.vy = Math.min(ball.vy, BALL_TERMINAL_VY);
+
+  // drag: stronger while rolling on the ground, gentler while in the air
+  ball.vx *= wasAirborne ? AIR_DRAG : ROLL_FRICTION;
+  ball.spin *= SPIN_DECAY;
+
+  // --- LANE (lateral / across-the-pitch-width) PHYSICS ---
+  // The ball's lane is now a real simulated position with its own velocity,
+  // not a cosmetic snap to whoever last touched it. This makes "where the
+  // ball visually sits relative to the goal's width" match what goal
+  // detection actually checks, fixing goals that registered while the ball
+  // was visibly outside the net.
+  if (ball.laneVel === undefined) ball.laneVel = 0;
+  ball.lane += ball.laneVel;
+  ball.laneVel *= wasAirborne ? AIR_DRAG : ROLL_FRICTION;
+  // keep the ball within the pitch's width, bouncing softly off the touchlines
+  if (ball.lane < 0.03) { ball.lane = 0.03; ball.laneVel *= -0.5; }
+  if (ball.lane > 0.97) { ball.lane = 0.97; ball.laneVel *= -0.5; }
+
+  // visual rotation speed driven by actual ball speed + spin, not a fixed rate,
+  // so a fast-moving ball spins fast and a stopped ball stops spinning
+  ball.rotation += (ball.vx * 0.06 + ball.spin * 0.02);
+
+  if (ball.y >= GROUND_Y - 1) {
+    ball.y = GROUND_Y - 1;
+    const impactSpeed = Math.abs(ball.vy);
+    if (impactSpeed > 1) sfxBounce();
+    // restitution scales with impact speed but stays low overall: a real
+    // football loses most of its energy on each bounce rather than springing
+    // back near its original speed, so it settles within a couple of bounces
+    const restitution = Math.min(0.32, 0.12 + impactSpeed * 0.015);
+    ball.vy *= -restitution;
+    ball.squash = Math.min(1, impactSpeed / 10); // drives a visual squash-on-impact effect
+    if (Math.abs(ball.vy) < 0.6) ball.vy = 0;
+  } else {
+    ball.squash *= 0.85; // relax squash back to normal while airborne/between bounces
+  }
+  // ceiling
+  if (ball.y < PITCH_TOP + 10) { ball.y = PITCH_TOP+10; ball.vy *= -0.5; }
+
+  // side walls (out of bounds bounce back softly, except goal mouths)
+  // A goal only counts if the ball is genuinely within the goal's net width
+  // (its real simulated lane position), not just anywhere along the goal line.
+  const GOAL_LANE_HALF_WIDTH = 0.15; // matches the visual goal height drawn in drawGoalFlat (fh*0.30 total)
+  const inGoalNet = Math.abs(ball.lane - 0.5) <= GOAL_LANE_HALF_WIDTH;
+  const inGoalMouthY = ball.y > GROUND_Y - GOAL_HEIGHT && ball.y <= GROUND_Y + 5 && inGoalNet;
+  if (ball.x < LEFT_GOAL_X + GOAL_WIDTH) {
+    if (!inGoalMouthY) {
+      ball.x = LEFT_GOAL_X + GOAL_WIDTH;
+      ball.vx *= -0.6;
+      ball.spin *= -0.5;
+    }
+  }
+  if (ball.x > RIGHT_GOAL_X) {
+    if (!inGoalMouthY) {
+      ball.x = RIGHT_GOAL_X;
+      ball.vx *= -0.6;
+      ball.spin *= -0.5;
+    }
+  }
+
+  // ---- GOAL DETECTION ----
+  // Require the ball to have actually crossed fully into the net depth (not just
+  // touched the goal line) so it reads as "ball in the net", not "ball at the line".
+  if (ball.x <= LEFT_GOAL_X - 4 && inGoalMouthY) {
+    triggerGoal("ai");
+  } else if (ball.x >= RIGHT_GOAL_X + GOAL_WIDTH + 4 && inGoalMouthY) {
+    triggerGoal("player");
+  }
+
+  // ---- COLLISION: every outfield player can kick/push the ball ----
+  const allOutfield = [...match.myTeam, ...match.oppTeam];
+  for (const pl of allOutfield) {
+    handleKickCollision(pl, ball, pl.kickTimer > 9, pl.lane);
+    bodyBallPush(pl, ball, pl.lane);
+  }
+
+  // ---- COLLISION: goalkeepers block ball ----
+  gkBlock(match.oppGK, ball, -1);
+  gkBlock(match.myGK, ball, 1);
+
+  // ---- COLLISION: keep players from overlapping each other (simple separation) ----
+  resolvePlayerCollisions(allOutfield);
+}
+
+// Shared movement/AI update for a single outfield player.
+// isHumanControlled: skip AI movement (input already applied by caller).
+// isOpponent: true for the AI team defending the LEFT side conceptually (attacks toward LEFT_GOAL_X... actually attacks player's goal at LEFT).
+function updateOutfieldPlayer(pl, ball, isHumanControlled, isOpponent){
+  if (!isHumanControlled) {
+    runOutfieldAI(pl, ball, isOpponent);
+  }
+
+  pl.x += pl.vx;
+  pl.y += pl.vy;
+  if (!pl.onGround) pl.vy += GRAVITY;
+  if (pl.y >= GROUND_Y) { pl.y = GROUND_Y; pl.vy = 0; pl.onGround = true; }
+
+  // keep players within the pitch length, respecting goal areas
+  pl.x = Math.max(LEFT_GOAL_X + GOAL_WIDTH + 5, Math.min(RIGHT_GOAL_X - 5, pl.x));
+
+  if (pl.kickTimer > 0) pl.kickTimer--;
+}
+
+// Simple zone-based AI: chase the ball if it's the nearest teammate to it
+// and within range, otherwise hold a home position near the assigned lane.
+function runOutfieldAI(pl, ball, isOpponent){
+  pl.aiThinkTimer--;
+  // Compare against AI teammates only (the currently human-controlled player
+  // is excluded from being "controlled" by AI, but still counts as a teammate
+  // when figuring out who's closest, via the isHuman-flagged entry below).
+  const teamArr = isOpponent ? match.oppTeam : match.myTeam.filter(p => !p.isHuman);
+  const myDist = Math.hypot(ball.x - pl.x, ball.y - (pl.y - pl.h/2));
+  let isClosest = true;
+  for (const other of teamArr) {
+    if (other === pl) continue;
+    const otherDist = Math.hypot(ball.x - other.x, ball.y - (other.y - other.h/2));
+    if (otherDist < myDist) { isClosest = false; break; }
+  }
+  // also compare against whichever player is currently human-controlled
+  if (!isOpponent) {
+    const human = match.myTeam.find(p => p.isHuman);
+    if (human && human !== pl) {
+      const humanDist = Math.hypot(ball.x - human.x, ball.y - (human.y - human.h/2));
+      if (humanDist < myDist) isClosest = false;
+    }
+  }
+
+  const chaseRange = 260;
+  const withinChaseRange = myDist < chaseRange;
+
+  let targetX;
+  if (isClosest && withinChaseRange) {
+    targetX = ball.x; // chase directly
+  } else {
+    // hold a home/support position, drifting slightly toward the ball's half of the pitch
+    const drift = (ball.x - pl.homeX) * 0.25;
+    targetX = pl.homeX + Math.max(-70, Math.min(70, drift));
+  }
+
+  const dx = targetX - pl.x;
+  const speed = (isClosest && withinChaseRange ? 2.7 : 1.8) * GAME_SPEED;
+  if (Math.abs(dx) > 6) {
+    pl.vx = dx > 0 ? speed : -speed;
+    pl.facing = pl.vx >= 0 ? 1 : -1;
+  } else {
+    pl.vx = 0;
+  }
+
+  // occasional jump if ball is high and close
+  if (pl.onGround && ball.y < GROUND_Y - 30 && Math.abs(ball.x-pl.x) < 50 && Math.random() < 0.03) {
+    pl.vy = JUMP_FORCE;
+    pl.onGround = false;
+  }
+
+  // kick when close enough and it's this player's turn to chase
+  const distToBall = Math.hypot(ball.x-pl.x, ball.y-(pl.y-pl.h/2));
+  if (distToBall < 36 && pl.kickTimer <= 0 && isClosest && Math.random() < 0.18) {
+    pl.kickTimer = 18;
+    const goalDir = isOpponent ? -1 : 1; // opponents attack toward LEFT_GOAL_X, my team attacks toward RIGHT_GOAL_X
+    const power = (6 + Math.random()*3) * GAME_SPEED;
+    ball.vx = goalDir * power;
+    ball.vy = (-4 - Math.random()*3) * GAME_SPEED;
+    ball.spin = (pl.vx || 0) * 1.4 + (Math.random()-0.5) * 3;
+    // aim the shot toward the center of the goal (lane 0.5) with some shot
+    // spread, rather than just continuing whatever lane the player stands on
+    const targetLane = 0.5 + (Math.random()-0.5) * 0.5;
+    ball.laneVel = (targetLane - ball.lane) * 0.3;
+    sfxKick();
+  }
+}
+
+function updateGoalkeeper(gk, ball, homeX, isThreatened){
+  let targetX = homeX;
+  if (isThreatened) {
+    const range = 50;
+    targetX = Math.max(homeX-range, Math.min(homeX+range, ball.x));
+  }
+  gk.x += (targetX - gk.x) * 0.12;
+}
+
+// Push apart any two outfield players that are overlapping, so the 10-player
+// pitch doesn't turn into a single stacked pile.
+function resolvePlayerCollisions(allPlayers){
+  for (let i=0;i<allPlayers.length;i++){
+    for (let j=i+1;j<allPlayers.length;j++){
+      const a = allPlayers[i], b = allPlayers[j];
+      if (rectsOverlap(a.x-a.w/2,a.y-a.h,a.w,a.h, b.x-b.w/2,b.y-b.h,b.w,b.h)) {
+        const push = a.x < b.x ? -1.2 : 1.2;
+        a.x += push;
+        b.x -= push;
+      }
+    }
+  }
+}
+
+function handleKickCollision(player, ball, isKicking, lane){
+  const px = player.x, py = player.y - player.h/2;
+  const dist = Math.hypot(ball.x-px, ball.y-py);
+  if (dist < 42 && isKicking) {
+    const dir = player.facing;
+    ball.vx = dir * (7 + Math.random()*2.5) * GAME_SPEED;
+    ball.vy = (-5 - Math.random()*3) * GAME_SPEED;
+    // spin imparted from the kicker's own sideways motion at the moment of contact,
+    // plus a touch of randomness so kicks aren't perfectly straight every time
+    ball.spin = (player.vx || 0) * 1.4 + (Math.random()-0.5) * 3;
+    // lane velocity impulse toward the kicker's lane, rather than snapping the
+    // ball's lane instantly — this keeps lane a real simulated quantity that
+    // actually matches the ball's visible trajectory across the pitch's width
+    if (lane !== undefined) {
+      ball.laneVel = (lane - ball.lane) * 0.35 + (Math.random()-0.5) * 0.04;
+    }
+  }
+}
+
+function bodyBallPush(player, ball, lane){
+  const px = player.x, py = player.y - player.h/2;
+  const dist = Math.hypot(ball.x-px, ball.y-py);
+  if (dist < 30) {
+    const angle = Math.atan2(ball.y-py, ball.x-px);
+    const force = (30-dist) * 0.15;
+    ball.vx += Math.cos(angle)*force;
+    ball.vy += Math.sin(angle)*force*0.5;
+    if (lane !== undefined) ball.laneVel += (lane - ball.lane) * 0.03;
+  }
+}
+
+function gkBlock(gk, ball, sideSign){
+  const dist = Math.hypot(ball.x-gk.x, ball.y-(gk.y-20));
+  if (dist < 24) {
+    const angle = Math.atan2(ball.y-(gk.y-20), ball.x-gk.x);
+    ball.vx = (Math.cos(angle)*7 + sideSign*2) * GAME_SPEED;
+    ball.vy = -4 * GAME_SPEED;
+    ball.spin *= 0.3; // a goalkeeper's parry knocks most of the spin out of the ball
+  }
+}
+
+function triggerGoal(who){
+  if (who === "player") {
+    match.playerScore++;
+    match.celebrationText = playerTeam.name.toUpperCase() + " SCORES!";
+  } else {
+    match.aiScore++;
+    match.celebrationText = aiTeam.name.toUpperCase() + " SCORES!";
+  }
+  match.goalCelebration = 120;
+  sfxGoal();
+}
+
+function resetAfterGoal(){
+  match.ball.x = 400;
+  match.ball.y = GROUND_Y - 10;
+  match.ball.vx = 0;
+  match.ball.vy = 0;
+  match.ball.lane = 0.5;
+  match.ball.laneVel = 0;
+  match.ball.spin = 0;
+  match.ball.squash = 0;
+
+  for (const pl of match.myTeam) {
+    pl.x = pl.homeX;
+    pl.y = GROUND_Y;
+    pl.vy = 0;
+    pl.onGround = true;
+  }
+  for (const pl of match.oppTeam) {
+    pl.x = pl.homeX;
+    pl.y = GROUND_Y;
+    pl.vy = 0;
+    pl.onGround = true;
+  }
+  match.kickoffFlash = 40;
+}
+
+function endMatch(){
+  match.ended = true;
+  STATE = "FULLTIME";
+}
+
+// ----------------------------------------------------------------
+// MATCH RENDERING
+// ----------------------------------------------------------------
+function drawPitch(){
+  // backdrop behind the field (visible only at the rounded/cut corners)
+  pixelRect(0,0,W,H,"#0a3a14");
+
+  // crowd stands in the margin bands around the pitch (drawn first, field overlays on top)
+  drawCrowd();
+
+  const fw = FIELD_RIGHT - FIELD_LEFT;
+  const fh = FIELD_BOTTOM - FIELD_TOP;
+  const cut = 26; // diagonal corner cut size, like the reference image
+
+  // checkered grass pattern (alternating light/dark green squares)
+  const cellW = fw / 14;
+  const cellH = fh / 9;
+  for (let cx=0; cx<14; cx++){
+    for (let cy=0; cy<9; cy++){
+      const shade = (cx+cy)%2===0 ? "#3fae3f" : "#379b37";
+      pixelRect(FIELD_LEFT + cx*cellW, FIELD_TOP + cy*cellH, cellW+0.5, cellH+0.5, shade);
+    }
+  }
+
+  // clip mask for diagonal-cut corners: draw 4 backdrop triangles over the corners
+  ctx.fillStyle = "#0a3a14";
+  ctx.beginPath(); ctx.moveTo(FIELD_LEFT,FIELD_TOP); ctx.lineTo(FIELD_LEFT+cut,FIELD_TOP); ctx.lineTo(FIELD_LEFT,FIELD_TOP+cut); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(FIELD_RIGHT,FIELD_TOP); ctx.lineTo(FIELD_RIGHT-cut,FIELD_TOP); ctx.lineTo(FIELD_RIGHT,FIELD_TOP+cut); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(FIELD_LEFT,FIELD_BOTTOM); ctx.lineTo(FIELD_LEFT+cut,FIELD_BOTTOM); ctx.lineTo(FIELD_LEFT,FIELD_BOTTOM-cut); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(FIELD_RIGHT,FIELD_BOTTOM); ctx.lineTo(FIELD_RIGHT-cut,FIELD_BOTTOM); ctx.lineTo(FIELD_RIGHT,FIELD_BOTTOM-cut); ctx.closePath(); ctx.fill();
+
+  // outer boundary with diagonal-cut corners (like reference)
+  ctx.strokeStyle = "#ffffff";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(FIELD_LEFT+cut, FIELD_TOP);
+  ctx.lineTo(FIELD_RIGHT-cut, FIELD_TOP);
+  ctx.lineTo(FIELD_RIGHT, FIELD_TOP+cut);
+  ctx.lineTo(FIELD_RIGHT, FIELD_BOTTOM-cut);
+  ctx.lineTo(FIELD_RIGHT-cut, FIELD_BOTTOM);
+  ctx.lineTo(FIELD_LEFT+cut, FIELD_BOTTOM);
+  ctx.lineTo(FIELD_LEFT, FIELD_BOTTOM-cut);
+  ctx.lineTo(FIELD_LEFT, FIELD_TOP+cut);
+  ctx.closePath();
+  ctx.stroke();
+
+  // halfway line (vertical, splitting pitch length in half)
+  const midX = FIELD_LEFT + fw/2;
+  ctx.beginPath();
+  ctx.moveTo(midX, FIELD_TOP);
+  ctx.lineTo(midX, FIELD_BOTTOM);
+  ctx.stroke();
+
+  // center circle
+  const midY = FIELD_TOP + fh/2;
+  const circleR = Math.min(fw,fh)*0.13;
+  ctx.beginPath();
+  ctx.arc(midX, midY, circleR, 0, Math.PI*2);
+  ctx.stroke();
+  pixelRect(midX-2, midY-2, 4, 4, "#ffffff");
+
+  // penalty boxes (rectangles hugging each goal line)
+  drawPenaltyBoxFlat(true);
+  drawPenaltyBoxFlat(false);
+
+  // goals
+  drawGoalFlat(true);
+  drawGoalFlat(false);
+
+  // corner flag markers (small triangle flags like the reference's team-colored corners)
+  drawCornerFlag(FIELD_LEFT, FIELD_TOP, 1, 1, playerTeam.primary);
+  drawCornerFlag(FIELD_LEFT, FIELD_BOTTOM, 1, -1, playerTeam.primary);
+  drawCornerFlag(FIELD_RIGHT, FIELD_TOP, -1, 1, aiTeam.primary);
+  drawCornerFlag(FIELD_RIGHT, FIELD_BOTTOM, -1, -1, aiTeam.primary);
+}
+
+// Pixel-art crowd stands filling the margin bands on all four sides of the pitch.
+// Drawn as a dark stand backdrop with rows of small colorful spectator dots, a subset
+// of which "shimmer" brighter each frame to suggest movement/cheering without needing
+// real animation frames per spectator.
+function drawCrowd(){
+  const standColor = "#1a1530";
+  const railColor = "#2e2750";
+  const dotSize = 4;
+  const fanColors = ["#ffcc00","#ff5555","#55aaff","#ffffff","#55cc55","#ff9933"];
+
+  function fanColorAt(seedX, seedY){
+    const h = Math.abs(Math.sin(seedX*12.9898 + seedY*78.233) * 43758.5453) % 1;
+    return fanColors[Math.floor(h * fanColors.length)];
+  }
+  function isShimmering(seedX, seedY, frameOffset){
+    const h = Math.abs(Math.sin(seedX*39.34 + seedY*11.13 + frameOffset) * 12543.918) % 1;
+    return h > 0.93;
+  }
+  const shimmerFrame = Math.floor(frame/8); // slow flicker rate so it doesn't strobe
+
+  // top stand (above the pitch, below the HUD topbar)
+  const topY0 = TOPBAR_HEIGHT, topY1 = FIELD_TOP - 4;
+  pixelRect(0, topY0, W, topY1-topY0, standColor);
+  pixelRect(0, topY1-3, W, 3, railColor);
+  for (let row=0; row*8 < (topY1-topY0-6); row++){
+    const ry = topY0 + 4 + row*8;
+    for (let col=0; col*7 < W; col++){
+      const rx = 3 + col*7;
+      const shimmer = isShimmering(col, row, shimmerFrame);
+      pixelRect(rx, ry, dotSize, dotSize, shimmer ? "#ffffff" : fanColorAt(col,row));
+    }
+  }
+
+  // bottom stand (below the pitch, above the bottom edge)
+  const botY0 = FIELD_BOTTOM + 4, botY1 = H;
+  pixelRect(0, botY0, W, botY1-botY0, standColor);
+  pixelRect(0, botY0, W, 3, railColor);
+  for (let row=0; row*8 < (botY1-botY0-6); row++){
+    const ry = botY0 + 4 + row*8;
+    for (let col=0; col*7 < W; col++){
+      const rx = 3 + col*7;
+      const shimmer = isShimmering(col, row+100, shimmerFrame);
+      pixelRect(rx, ry, dotSize, dotSize, shimmer ? "#ffffff" : fanColorAt(col, row+100));
+    }
+  }
+
+  // left stand (narrow side band)
+  const leftX0 = 0, leftX1 = FIELD_LEFT - 4;
+  pixelRect(leftX0, FIELD_TOP-4, leftX1-leftX0, FIELD_BOTTOM-FIELD_TOP+8, standColor);
+  pixelRect(leftX1-3, FIELD_TOP-4, 3, FIELD_BOTTOM-FIELD_TOP+8, railColor);
+  for (let row=0; row*7 < (FIELD_BOTTOM-FIELD_TOP+8); row++){
+    const ry = FIELD_TOP-4 + 3 + row*7;
+    for (let col=0; col*8 < (leftX1-leftX0-3); col++){
+      const rx = leftX0 + 3 + col*8;
+      const shimmer = isShimmering(col+200, row, shimmerFrame);
+      pixelRect(rx, ry, dotSize, dotSize, shimmer ? "#ffffff" : fanColorAt(col+200, row));
+    }
+  }
+
+  // right stand (narrow side band)
+  const rightX0 = FIELD_RIGHT + 4, rightX1 = W;
+  pixelRect(rightX0, FIELD_TOP-4, rightX1-rightX0, FIELD_BOTTOM-FIELD_TOP+8, standColor);
+  pixelRect(rightX0, FIELD_TOP-4, 3, FIELD_BOTTOM-FIELD_TOP+8, railColor);
+  for (let row=0; row*7 < (FIELD_BOTTOM-FIELD_TOP+8); row++){
+    const ry = FIELD_TOP-4 + 3 + row*7;
+    for (let col=0; col*8 < (rightX1-rightX0-3); col++){
+      const rx = rightX0 + 3 + col*8;
+      const shimmer = isShimmering(col+300, row, shimmerFrame);
+      pixelRect(rx, ry, dotSize, dotSize, shimmer ? "#ffffff" : fanColorAt(col+300, row));
+    }
+  }
+}
+
+function drawPenaltyBoxFlat(isLeft){
+  const fh = FIELD_BOTTOM - FIELD_TOP;
+  const boxDepth = (FIELD_RIGHT-FIELD_LEFT) * 0.14;
+  const boxTop = FIELD_TOP + fh*0.2;
+  const boxBottom = FIELD_BOTTOM - fh*0.2;
+  ctx.strokeStyle = "#ffffff";
+  ctx.lineWidth = 2;
+  if (isLeft) {
+    ctx.strokeRect(FIELD_LEFT, boxTop, boxDepth, boxBottom-boxTop);
+    ctx.beginPath();
+    ctx.arc(FIELD_LEFT+boxDepth, (boxTop+boxBottom)/2, fh*0.1, Math.PI*0.6, Math.PI*1.4);
+    ctx.stroke();
+  } else {
+    ctx.strokeRect(FIELD_RIGHT-boxDepth, boxTop, boxDepth, boxBottom-boxTop);
+    ctx.beginPath();
+    ctx.arc(FIELD_RIGHT-boxDepth, (boxTop+boxBottom)/2, fh*0.1, -Math.PI*0.4, Math.PI*0.4);
+    ctx.stroke();
+  }
+}
+
+function drawGoalFlat(isLeft){
+  const fh = FIELD_BOTTOM - FIELD_TOP;
+  const goalH = fh * 0.30;       // bigger net, more realistic proportion relative to goal width
+  const goalDepth = 30;          // deeper net so the ball visibly travels into it before scoring
+  const midY = FIELD_TOP + fh/2;
+  const top = midY - goalH/2;
+  const bottom = midY + goalH/2;
+  const x0 = isLeft ? FIELD_LEFT : FIELD_RIGHT;
+  const x1 = isLeft ? FIELD_LEFT - goalDepth : FIELD_RIGHT + goalDepth;
+  const dir = isLeft ? -1 : 1; // direction the net extends away from the field
+
+  // --- back net panel (the net stretched across the very back of the goal) ---
+  const backRows = 7, backCols = 5;
+  for (let r=0;r<backRows;r++){
+    for (let c=0;c<backCols;c++){
+      const cw = goalDepth/backCols, ch = goalH/backRows;
+      const cx = isLeft ? x0 - c*cw - cw : x0 + c*cw;
+      const cy = top + r*ch;
+      const checker = (r+c)%2===0;
+      pixelRect(Math.min(cx,cx+cw), cy, cw+0.5, ch+0.5, checker ? "#f4faf4" : "#2a8c2a");
+    }
+  }
+
+  // --- side net panels (top and bottom of the goal, drawn as sloped trapezoids
+  // to suggest the net narrowing toward the back, like a real goal viewed from above) ---
+  function sideNetPanel(edgeY, towardCenter){
+    const steps = 8;
+    for (let i=0;i<steps;i++){
+      const t0 = i/steps, t1 = (i+1)/steps;
+      const px0 = x0 + (x1-x0)*t0, px1 = x0 + (x1-x0)*t1;
+      const py0 = edgeY, py1 = edgeY + towardCenter*( (goalH*0.06) * t1 );
+      const checker = i%2===0;
+      ctx.fillStyle = checker ? "#eef7ee" : "#238a23";
+      ctx.beginPath();
+      ctx.moveTo(px0, edgeY);
+      ctx.lineTo(px1, edgeY + towardCenter*((goalH*0.06)*t1));
+      ctx.lineTo(px1, edgeY + towardCenter*((goalH*0.06)*t1) + towardCenter*2);
+      ctx.lineTo(px0, edgeY + towardCenter*2);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+  sideNetPanel(top, 1);     // top side panel, net narrows downward toward the back
+  sideNetPanel(bottom-2, -1); // bottom side panel, net narrows upward toward the back
+
+  // --- net mesh lines (diagonal crosshatch over the back panel for texture) ---
+  ctx.strokeStyle = "rgba(255,255,255,0.35)";
+  ctx.lineWidth = 1;
+  const meshX0 = isLeft ? x1 : x0, meshX1 = isLeft ? x0 : x1;
+  for (let i=-2;i<=12;i++){
+    ctx.beginPath();
+    ctx.moveTo(meshX0 + i*6, top);
+    ctx.lineTo(meshX0 + i*6 - (bottom-top), bottom);
+    ctx.stroke();
+  }
+
+  // --- goal frame (posts + crossbar outline, drawn last so it sits crisp on top) ---
+  ctx.strokeStyle = "#ffffff";
+  ctx.lineWidth = 4;
+  ctx.strokeRect(Math.min(x0,x1), top, Math.abs(x1-x0), goalH);
+  // top/bottom post caps for a slightly rounded, more solid post look
+  pixelRect(Math.min(x0,x1)-1, top-2, Math.abs(x1-x0)+2, 4, "#ffffff");
+  pixelRect(Math.min(x0,x1)-1, bottom-2, Math.abs(x1-x0)+2, 4, "#ffffff");
+
+  // goal line (thicker, on the field boundary itself — the actual scoring line)
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(x0, top); ctx.lineTo(x0, bottom);
+  ctx.stroke();
+}
+
+function drawCornerFlag(x, y, dirX, dirY, color){
+  const fx = x + dirX*4;
+  const fy = y + dirY*4;
+  pixelRect(fx-1, fy - dirY*14, 2, 14, "#cccccc"); // pole
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(fx, fy - dirY*14);
+  ctx.lineTo(fx + dirX*8, fy - dirY*11);
+  ctx.lineTo(fx, fy - dirY*8);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawPlayerSprite(p, kit, isKicking, lane, isHuman, number){
+  // p.y is jump-lift in world space (GROUND_Y at rest, smaller when jumping)
+  const s = SPRITE_SCALE;
+  const lift = GROUND_Y - p.y;
+  const screen = isoScreenPos(p.x, lane, lift);
+  const x = screen.x, groundY = screen.y;
+  const bodyTop = groundY - p.h;
+  const dir = p.facing;
+  // legs animation simple
+  const legOffset = p.onGround && Math.abs(p.vx)>0.1 ? Math.sin(frame*0.5)*4*s : 0;
+
+  // shadow (drawn at true ground level, not lifted, so jumps read clearly)
+  const groundScreen = isoScreenPos(p.x, lane, 0);
+  ctx.fillStyle = "rgba(0,0,0,0.3)";
+  ctx.beginPath();
+  ctx.ellipse(groundScreen.x, groundScreen.y+4*s, 15*s, 5*s, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // legs (chunky, dark shorts/boots like reference)
+  pixelRect(x-9*s, groundY-15*s+legOffset*0.3, 8*s, 15*s, "#3a2a1a");
+  pixelRect(x+1*s, groundY-15*s-legOffset*0.3, 8*s, 15*s, "#3a2a1a");
+  pixelRect(x-9*s, groundY-4*s+legOffset*0.3, 8*s, 5*s, "#222"); // boots
+  pixelRect(x+1*s, groundY-4*s-legOffset*0.3, 8*s, 5*s, "#222");
+
+  // torso - chunky, hunched NES-style proportions
+  pixelRect(x-12*s, bodyTop+14*s, 24*s, 20*s, kit.primary);
+  pixelRect(x-12*s, bodyTop+14*s, 24*s, 7*s, kit.secondary); // collar/shoulder stripe
+  pixelRect(x-12*s, bodyTop+28*s, 24*s, 4*s, kit.secondary); // waist stripe
+
+  // arms (stubby, raised slightly - classic hunched running pose)
+  const armSwing = (isKicking ? 7 : (Math.sin(frame*0.3)*3)) * s;
+  pixelRect(x-17*s, bodyTop+12*s+armSwing, 6*s, 16*s, kit.primary);
+  pixelRect(x+11*s, bodyTop+12*s-armSwing, 6*s, 16*s, kit.primary);
+  pixelRect(x-17*s, bodyTop+24*s+armSwing, 6*s, 4*s, "#ffcc99"); // hands
+  pixelRect(x+11*s, bodyTop+24*s-armSwing, 6*s, 4*s, "#ffcc99");
+
+  // head - big, blocky, pink/cream tone like reference, slight forward lean
+  const headX = x + dir*2*s;
+  pixelRect(headX-9*s, bodyTop-2*s, 18*s, 16*s, "#ffcc99");
+  // spiky dark hair on top
+  pixelRect(headX-9*s, bodyTop-7*s, 18*s, 7*s, "#2a1a0a");
+  pixelRect(headX-9*s, bodyTop-9*s, 5*s, 4*s, "#2a1a0a");
+  pixelRect(headX-2*s, bodyTop-10*s, 5*s, 5*s, "#2a1a0a");
+  pixelRect(headX+5*s, bodyTop-9*s, 5*s, 4*s, "#2a1a0a");
+  // simple face dot (eye) facing direction of movement
+  pixelRect(headX + dir*4*s, bodyTop+4*s, 3*s, 3*s, "#1a1a1a");
+
+  // kicking leg extended forward
+  if (isKicking) {
+    pixelRect(x + dir*8*s, groundY-20*s, dir*18*s, 9*s, "#3a2a1a");
+    pixelRect(x + dir*22*s, groundY-18*s, dir*6*s, 6*s, "#222"); // boot
+  }
+
+  // jersey number, drawn just above the head
+  if (number !== undefined) {
+    pixelTextShadow(String(number), x, bodyTop-12*s, Math.max(9, 11*s), "#ffffff", "#000000", "center");
+  }
+
+  // marker above the human-controlled player so they're identifiable on the busy pitch
+  if (isHuman) {
+    const bounce = Math.sin(frame*0.18)*2;
+    ctx.fillStyle = "#ffd700";
+    ctx.beginPath();
+    ctx.moveTo(x, bodyTop-24*s+bounce);
+    ctx.lineTo(x-5, bodyTop-30*s+bounce);
+    ctx.lineTo(x+5, bodyTop-30*s+bounce);
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
+function drawGK(gk, kit, lane, number){
+  const s = SPRITE_SCALE;
+  const screen = isoScreenPos(gk.x, lane, 0);
+  const x = screen.x, groundY = screen.y;
+  const bodyTop = groundY - gk.h;
+  ctx.fillStyle = "rgba(0,0,0,0.3)";
+  ctx.beginPath();
+  ctx.ellipse(x, groundY+4*s, 13*s, 4*s, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // legs
+  pixelRect(x-8*s, groundY-13*s, 6*s, 13*s, "#3a2a1a");
+  pixelRect(x+2*s, groundY-13*s, 6*s, 13*s, "#3a2a1a");
+  pixelRect(x-8*s, groundY-3*s, 6*s, 4*s, "#222");
+  pixelRect(x+2*s, groundY-3*s, 6*s, 4*s, "#222");
+
+  // torso - distinct GK jersey (secondary color dominant)
+  pixelRect(x-11*s, bodyTop+13*s, 22*s, 17*s, kit.secondary);
+  pixelRect(x-11*s, bodyTop+13*s, 22*s, 5*s, kit.primary);
+
+  // arms out wide (ready stance)
+  pixelRect(x-15*s, bodyTop+13*s, 6*s, 12*s, kit.secondary);
+  pixelRect(x+9*s, bodyTop+13*s, 6*s, 12*s, kit.secondary);
+  pixelRect(x-16*s, bodyTop+22*s, 6*s, 4*s, "#ffcc99");
+  pixelRect(x+10*s, bodyTop+22*s, 6*s, 4*s, "#ffcc99");
+
+  // head
+  pixelRect(x-7*s, bodyTop, 14*s, 14*s, "#ffcc99");
+  pixelRect(x-7*s, bodyTop-4*s, 14*s, 6*s, "#2a1a0a");
+
+  // jersey number above the goalkeeper's head
+  if (number !== undefined) {
+    pixelTextShadow(String(number), x, bodyTop-12*s, Math.max(9, 11*s), "#ffffff", "#000000", "center");
+  }
+}
+
+function drawBall(ball){
+  const lift = GROUND_Y - ball.y;
+  const screen = isoScreenPos(ball.x, ball.lane !== undefined ? ball.lane : 0.5, lift);
+  const groundScreen = isoScreenPos(ball.x, ball.lane !== undefined ? ball.lane : 0.5, 0);
+
+  // shadow at true ground level (shrinks slightly the higher the ball is)
+  const shrink = Math.max(0.4, 1 - lift/120);
+  ctx.fillStyle = "rgba(0,0,0,0.25)";
+  ctx.beginPath();
+  ctx.ellipse(groundScreen.x, groundScreen.y+3, 9*shrink, 3*shrink, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // squash/stretch on bounce impact: flattens vertically + widens horizontally
+  const squash = ball.squash || 0;
+  const scaleX = 1 + squash*0.35;
+  const scaleY = 1 - squash*0.35;
+
+  ctx.save();
+  ctx.translate(screen.x, screen.y);
+  ctx.rotate(ball.rotation || 0);
+  ctx.scale(scaleX, scaleY);
+  ctx.beginPath();
+  ctx.arc(0,0,ball.r,0,Math.PI*2);
+  ctx.fillStyle = "#fff";
+  ctx.fill();
+  ctx.strokeStyle = "#222";
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  // pentagon pattern dots
+  pixelRect(-2,-2,4,4,"#222");
+  pixelRect(-7,2,3,3,"#222");
+  pixelRect(4,2,3,3,"#222");
+  ctx.restore();
+}
+
+function drawScoreboard(){
+  const hudY = H - 70;
+  const hudH = 70;
+
+  // black HUD bar
+  pixelRect(0, hudY, W, hudH, "#000000");
+  pixelRect(0, hudY, W, 3, "#ffffff");
+
+  const panelGap = 4;
+  const panelY = hudY + panelGap;
+  const panelH = hudH - panelGap*2;
+
+  // panel 1: status / score panel (left, like "O.K." panel in reference)
+  const p1W = 230;
+  pixelRect(panelGap, panelY, p1W, panelH, "#000000");
+  ctx.strokeStyle = "#ffffff";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(panelGap, panelY, p1W, panelH);
+  pixelText(playerTeam.name.toUpperCase(), panelGap + p1W/2, panelY + 16, 11, "#ffffff", "center");
+  pixelTextShadow(String(match.playerScore) + " - " + String(match.aiScore), panelGap + p1W/2, panelY + 38, 22, "#ffffff", "#444444", "center");
+  pixelText(aiTeam.name.toUpperCase(), panelGap + p1W/2, panelY + 57, 11, "#ffffff", "center");
+
+  // panel 2: mini radar map (center, like the green minimap in reference)
+  const p2X = panelGap + p1W + panelGap;
+  const p2W = 220;
+  pixelRect(p2X, panelY, p2W, panelH, "#000000");
+  ctx.strokeStyle = "#ffffff";
+  ctx.strokeRect(p2X, panelY, p2W, panelH);
+  // mini green pitch
+  const miniX = p2X+10, miniY = panelY+8, miniW = p2W-20, miniH = panelH-16;
+  pixelRect(miniX, miniY, miniW, miniH, "#1a8c1a");
+  ctx.strokeStyle = "#ffffff";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(miniX, miniY, miniW, miniH);
+  ctx.beginPath();
+  ctx.moveTo(miniX+miniW/2, miniY);
+  ctx.lineTo(miniX+miniW/2, miniY+miniH);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(miniX+miniW/2, miniY+miniH/2, 8, 0, Math.PI*2);
+  ctx.stroke();
+  // ball + player blips on minimap
+  if (match.ball) {
+    const bx = miniX + (match.ball.x/W)*miniW;
+    pixelRect(bx-2, miniY+miniH/2-2, 4, 4, "#ffffff");
+  }
+  if (match.myTeam) {
+    for (const pl of match.myTeam) {
+      const px = miniX + (pl.x/W)*miniW;
+      const py = miniY + pl.lane*miniH;
+      pixelRect(px-2, py-2, pl.isHuman?3:2, pl.isHuman?3:2, pl.isHuman ? "#ffcc00" : "#88ccff");
+    }
+  }
+  if (match.oppTeam) {
+    for (const pl of match.oppTeam) {
+      const px = miniX + (pl.x/W)*miniW;
+      const py = miniY + pl.lane*miniH;
+      pixelRect(px-2, py-2, 2, 2, "#ff8888");
+    }
+  }
+
+  // panel 3: timer (right, "TEMPS" style)
+  const p3X = p2X + p2W + panelGap;
+  const p3W = W - p3X - panelGap;
+  pixelRect(p3X, panelY, p3W, panelH, "#000000");
+  ctx.strokeStyle = "#ffffff";
+  ctx.strokeRect(p3X, panelY, p3W, panelH);
+  const t = Math.max(0, match.timeLeft);
+  const mm = Math.floor(t/60);
+  const ss = Math.floor(t%60);
+  pixelText("TIME", p3X + p3W/2, panelY+15, 12, "#ffffff", "center");
+  pixelTextShadow(mm + ":" + String(ss).padStart(2,"0"), p3X + p3W/2, panelY+42, 22, t<10?"#ff5555":"#ffffff", "#444444", "center");
+}
+
+function drawKickoffFlash(){
+  if (match.kickoffFlash > 0) {
+    ctx.globalAlpha = Math.min(1, match.kickoffFlash/30);
+    pixelTextShadow("KICK OFF!", W/2, H/2, 40, "#ffd700", "#5c3d00", "center");
+    ctx.globalAlpha = 1;
+  }
+}
+
+function drawGoalCelebration(){
+  if (match.goalCelebration > 0) {
+    ctx.fillStyle = "rgba(0,0,0,0.4)";
+    ctx.fillRect(0,0,W,H);
+    const bounce = Math.abs(Math.sin(frame*0.3))*10;
+    pixelTextShadow("GOAL!", W/2, H/2-30-bounce, 60, "#ffd700", "#5c3d00", "center");
+    pixelTextShadow(match.celebrationText, W/2, H/2+40, 18, "#ffffff", "#000000", "center");
+
+    // confetti pixels
+    for (let i=0;i<40;i++){
+      const cx = (i*37 + frame*4) % W;
+      const cy = (i*53 + frame*6) % H;
+      const colors = ["#ffd700","#ff4444","#44ff44","#4488ff","#ffffff"];
+      pixelRect(cx, cy, 4, 4, colors[i%colors.length]);
+    }
+  }
+}
+
+function drawMatchScreen(){
+  drawPitch();
+  // depth-sort by lane (top lane = farther back, draws first) so overlapping
+  // sprites read correctly on the now much busier 5v5 pitch.
+  const allEntities = [
+    ...match.oppTeam.map(pl => ({pl, kit: aiTeam, isGK:false})),
+    ...match.myTeam.map(pl => ({pl, kit: playerTeam, isGK:false})),
+  ];
+  allEntities.sort((a,b) => a.pl.lane - b.pl.lane);
+  for (const ent of allEntities) {
+    drawPlayerSprite(ent.pl, ent.kit, ent.pl.kickTimer>8, ent.pl.lane, ent.pl.isHuman, ent.pl.number);
+  }
+  drawGK(match.oppGK, aiTeam, match.oppGK.lane, match.oppGK.number);
+  drawGK(match.myGK, playerTeam, match.myGK.lane, match.myGK.number);
+  drawBall(match.ball);
+  drawScoreboard();
+  drawKickoffFlash();
+  drawGoalCelebration();
+}
+
+// ----------------------------------------------------------------
+// FULL TIME SCREEN
+// ----------------------------------------------------------------
+function drawFullTimeScreen(){
+  pixelRect(0,0,W,H,"#0a0a1a");
+
+  pixelTextShadow("FULL TIME", W/2, 90, 44, "#ffd700", "#5c3d00", "center");
+
+  pixelRect(150,140,500,160,"#161626");
+  ctx.strokeStyle = "#0f0";
+  ctx.lineWidth = 3;
+  ctx.strokeRect(150,140,500,160);
+
+  pixelText(playerTeam.name, 280, 190, 18, "#fff", "center");
+  pixelText(aiTeam.name, 520, 190, 18, "#fff", "center");
+  pixelTextShadow(match.playerScore + "  -  " + match.aiScore, W/2, 250, 46, "#ffd700", "#5c3d00", "center");
+
+  let resultText = "";
+  let resultColor = "#fff";
+  if (match.playerScore > match.aiScore) { resultText = playerTeam.name.toUpperCase() + " WINS!"; resultColor="#33ff66"; }
+  else if (match.aiScore > match.playerScore) { resultText = aiTeam.name.toUpperCase() + " WINS!"; resultColor="#ff5555"; }
+  else { resultText = "DRAW MATCH"; resultColor="#ffd700"; }
+
+  pixelTextShadow(resultText, W/2, 330, 28, resultColor, "#000", "center");
+
+  // Play again button
+  const pulse = 0.7+0.3*Math.sin(frame*0.15);
+  pixelRect(300,420,200,50,"#1a4a1a");
+  ctx.strokeStyle = "#0f0";
+  ctx.lineWidth = 3;
+  ctx.strokeRect(300,420,200,50);
+  ctx.globalAlpha = pulse;
+  pixelText("PLAY AGAIN", W/2, 445, 18, "#fff", "center");
+  ctx.globalAlpha = 1;
+
+  pixelText("PRESS SPACE/ENTER OR CLICK BUTTON", W/2, 500, 12, "#888", "center");
+  pixelText("THANKS FOR PLAYING -- VIETNAM FOOTBALL CLUB 2005", W/2, 560, 11, "#444", "center");
+}
+
+// ----------------------------------------------------------------
+// MAIN LOOP
+// ----------------------------------------------------------------
+let lastTime = performance.now();
+function loop(now){
+  const dt = Math.min(0.05, (now - lastTime)/1000);
+  lastTime = now;
+  frame++;
+
+  if (STATE === "BOOT") {
+    drawBootScreen();
+  } else if (STATE === "TEAMSELECT") {
+    drawTeamSelectScreen();
+  } else if (STATE === "OPPSELECT") {
+    drawOppSelectScreen();
+  } else if (STATE === "MATCH") {
+    updateMatch(dt);
+    drawMatchScreen();
+  } else if (STATE === "FULLTIME") {
+    drawFullTimeScreen();
+  }
+
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+})();
+</script>
+</body>
+</html>
